@@ -19,5 +19,6 @@ conda update numpy
 
 conda install theano
 
-conda install sympy
+conda install matplotlib
 
+pip install pytransform3d
