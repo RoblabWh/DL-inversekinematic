@@ -115,7 +115,7 @@ def buildDhTcpFrame(q_array):
     return dh_frame
 
 
-class Generator(object):
+class DataHandler(object):
     
     def __init__(self):
         self.dmax = np.radians(165)
@@ -155,6 +155,63 @@ class Generator(object):
 
         return positions, tcp
 
+    def generate_data_step(self, iterations=100):
+        #Maximale und minimale Werte (based on robo freedom tests) */
+        a1 = [165, -168]
+        a2 = [85, -64]
+        a3 = [145, -141]
+        a4 = [101, -101]
+        a5 = [155, -161]
+        joint_limits = [a1, a2, a3, a4, a5]
+        state = np.zeros(5)
+        pos_arr = []
+    
+    
+        for i in range(iterations):
+            degree_joint_pos = []
+            for i, joint_range in enumerate(joint_limits):
+                step = (2*np.random.randint(0,2)-1) * np.random.randint(1,6)
+                if((step + state[i]) > joint_range[0] or (step + state[i]) < joint_range[1]):
+                    step *= -np.random.randint(1,6)
+                state[i]+= step
+                degree_joint_pos.append(state[i])
+
+            degree_joint_pos = np.asarray(degree_joint_pos)
+            radians = np.radians(degree_joint_pos)
+            pos_arr.append(radians)
+    
+#     for i, joint_range in enumerate(joint_limits):
+#         for joint_val in range(joint_range[1], joint_range[0] + 1):
+#             degree_joint_pos = []
+#             for j in range(5):
+#                 if i is j:
+#                     degree_joint_pos.append(joint_val)
+#                 else:
+#                     degree_joint_pos.append(state[i])
+	    
+#             degree_joint_pos = np.asarray(degree_joint_pos)
+#             radians = np.radians(degree_joint_pos)
+# #         radians = degree_joint_pos
+#             pos_arr.append(radians)
+#     state[i] = joint_range[0]
+    
+        positions = np.asarray(pos_arr)
+        print("positions calculated")
+        tcp = []
+        for i in range(len(positions)):
+            frame = buildDhTcpFrame(positions[i])
+            frame = np.asarray(frame.flatten())
+            frame = frame[0:, :12]
+            frame = np.squeeze(frame)
+#         xyz = frame[3::4]
+            tcp.append(frame)
+    
+        tcp = np.asarray(tcp)
+        print("tcp calculated")
+        tcp, positions = self.deleteDuplicate(tcp, positions)
+        print("duplicates erased")
+        return positions, tcp
+
     def isDuplicate(tcp):
         xyz = frame[3::4]
         for i in range(len(tcp)):
@@ -162,6 +219,20 @@ class Generator(object):
                 for j in range((i+1), len(tcp)):
                         xyz_ = tcp[j][3::4]
         return False
+
+    def deleteDuplicate(self, tcp, pos):
+        isDuplicate = []
+        for i in range(len(tcp)):
+            xyz = tcp[i][3::4]
+            for j in range((i+1), len(tcp)):
+                xyz_ = tcp[j][3::4]
+                if xyz[0] == xyz_[0] and xyz[1] == xyz_[1] and xyz[2] == xyz_[2]:
+                    isDuplicate.append(i)
+    
+    #     print(len(isDuplicate))
+        new_tcp = np.delete(tcp, isDuplicate, 0)
+        new_joint_pos = np.delete(pos, isDuplicate, 0)
+        return new_joint_pos, new_tcp
     
     def denormalize(self, data):
     
@@ -181,9 +252,15 @@ class Generator(object):
             self.normalize(jpos)
             tpos = tf.normalize(tcp, axis=-1, order=2)
             yield (tpos, jpos)
-
-    def generate(self, batch_size):
-        jpos, tcp = self.generate_data(batch_size)
+    
+    def generate_step(self, batch_size):
+        jpos, tpos = self.generate_data_step(batch_size)
         self.normalize(jpos)
-        tpos = tf.normalize(tcp, axis=-1, order=2)
-        return tpos, jpos
+        #tpos = tf.normalize(tcp, axis=-1, order=2)
+        return jpos, tpos
+    
+    def generate(self, batch_size):
+        jpos, tpos = self.generate_data(batch_size)
+        self.normalize(jpos)
+        #tpos = tf.normalize(tcp, axis=-1, order=2)
+        return jpos, tpos
