@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import keras.utils as tf
+import keras.utils
 
 class Drawer():      
     def __init__(self):
@@ -120,15 +120,16 @@ class DataHandler(object):
     def __init__(self):
         self.dmax = np.radians(165)
         self.dmin = np.radians(-168)
+
+        #Maximale und minimale Werte (based on robo freedom tests) */
+        self.a1 = [165, -168]
+        self.a2 = [85, -64]
+        self.a3 = [145, -141]
+        self.a4 = [101, -101]
+        self.a5 = [155, -161]
         
     def generate_data(self, iterations):
-        #Maximale und minimale Werte (based on robo freedom tests) */
-        a1 = [165, -168]
-        a2 = [85, -64]
-        a3 = [145, -141]
-        a4 = [101, -101]
-        a5 = [155, -161]
-        joint_limits = [a1, a2, a3, a4, a5]
+        joint_limits = [self.a1, self.a2, self.a3, self.a4, self.a5]
         pos_arr = []
         for i in range(iterations):
             degree_joint_pos = []
@@ -156,25 +157,22 @@ class DataHandler(object):
         return positions, tcp
 
     def generate_data_step(self, iterations=100):
-        #Maximale und minimale Werte (based on robo freedom tests) */
-        a1 = [165, -168]
-        a2 = [85, -64]
-        a3 = [145, -141]
-        a4 = [101, -101]
-        a5 = [155, -161]
-        joint_limits = [a1, a2, a3, a4, a5]
+
+        joint_limits = [self.a1, self.a2, self.a3, self.a4, self.a5]
         state = np.zeros(5)
+        direction = np.ones(5)
         pos_arr = []
-    
-    
+        
         for i in range(iterations):
             degree_joint_pos = []
-            for i, joint_range in enumerate(joint_limits):
-                step = (2*np.random.randint(0,2)-1) * np.random.randint(1,6)
-                if((step + state[i]) > joint_range[0] or (step + state[i]) < joint_range[1]):
-                    step *= -np.random.randint(1,6)
-                state[i]+= step
-                degree_joint_pos.append(state[i])
+            for j, joint_range in enumerate(joint_limits):
+                #step = (2*np.random.randint(0,2)-1) * np.random.randint(1,6) * direction[j]
+                step = np.random.randint(1,6) * direction[j]
+                if((step + state[j]) > joint_range[0] or (step + state[j]) < joint_range[1]):
+                    direction[j] *= -1
+                    step *= direction[j]
+                state[j]+= step
+                degree_joint_pos.append(state[j])
 
             degree_joint_pos = np.asarray(degree_joint_pos)
             radians = np.radians(degree_joint_pos)
@@ -208,7 +206,7 @@ class DataHandler(object):
     
         tcp = np.asarray(tcp)
         print("tcp calculated")
-        tcp, positions = self.deleteDuplicate(tcp, positions)
+        positions, tcp = self.deleteDuplicate(tcp, positions)
         print("duplicates erased")
         return positions, tcp
 
@@ -250,17 +248,17 @@ class DataHandler(object):
         while True:
             jpos, tcp = self.generate_data(batch_size)
             self.normalize(jpos)
-            tpos = tf.normalize(tcp, axis=-1, order=2)
+            tpos = keras.utils.normalize(tcp, axis=-1, order=2)
             yield (tpos, jpos)
     
     def generate_step(self, batch_size):
         jpos, tpos = self.generate_data_step(batch_size)
         self.normalize(jpos)
-        #tpos = tf.normalize(tcp, axis=-1, order=2)
+        #tpos = keras.utils.normalize(tcp, axis=-1, order=2)
         return jpos, tpos
     
     def generate(self, batch_size):
         jpos, tpos = self.generate_data(batch_size)
         self.normalize(jpos)
-        #tpos = tf.normalize(tcp, axis=-1, order=2)
+        #tpos = keras.utils.normalize(tcp, axis=-1, order=2)
         return jpos, tpos
