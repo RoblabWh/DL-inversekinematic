@@ -245,7 +245,7 @@ class DataHandler(object):
 
             # Aufrunden des Frames
             xyz = np.around(frame[3::4], decimals=3)
-            rotation = np.around(np.asarray([frame[0:3], frame[4:7], frame[8:11]]).flatten(), decimals=4)
+            rotation = np.around(np.asarray([frame[0:3], frame[4:7], frame[8:11]]).flatten(), decimals=9)
             for j in range(12):
                 if (j != 3) and (j != 7) and (j != 11):
                     frame[j] = rotation[j - int(j / 4)]
@@ -254,7 +254,7 @@ class DataHandler(object):
 
             tcp.append(frame)
 
-        return tcp
+        return np.asarray(tcp)
 
     def generate_data(self, iterations):
         joint_limits = [self.a1, self.a2, self.a3, self.a4, self.a5]
@@ -269,25 +269,7 @@ class DataHandler(object):
 
         positions = np.around(np.asarray(pos_arr), decimals=4)
 
-        tcp = []
-        for i in range(iterations):
-            frame = buildDhTcpFrame(positions[i])
-            frame = np.asarray(frame.flatten())
-            frame = frame[0:12]
-            # frame = np.squeeze(frame)
-
-            # Aufrunden des Frames
-            xyz = np.around(frame[3::4], decimals=3)
-            rotation = np.around(np.asarray([frame[0:3], frame[4:7], frame[8:11]]).flatten(), decimals=4)
-            for j in range(12):
-                if (j != 3) and (j != 7) and (j != 11):
-                    frame[j] = rotation[j - int(j / 4)]
-                else:
-                    frame[j] = xyz[j % 3]
-
-            tcp.append(frame)
-
-        tcp = np.asarray(tcp)
+        tcp = self.calc_tcp(positions)
 
         return positions, tcp
 
@@ -303,7 +285,7 @@ class DataHandler(object):
             for j, joint_range in enumerate(joint_limits):
                 # step = (2*np.random.randint(0,2)-1) * np.random.randint(1,6) * direction[j]
                 step = np.random.randint(1, 6) * direction[j]
-                if ((step + state[j]) > joint_range[0] or (step + state[j]) < joint_range[1]):
+                if (step + state[j]) > joint_range[0] or (step + state[j]) < joint_range[1]:
                     direction[j] *= -1
                     step *= direction[j]
                 state[j] += step
@@ -314,9 +296,9 @@ class DataHandler(object):
 
         positions = np.around(np.asarray(pos_arr), decimals=4)
 
-        print("positions calculated")
+        # print("positions calculated")
         tcp = self.calc_tcp(positions)
-        print("tcp calculated")
+        # print("tcp calculated")
 
         # positions, tcp = self.deleteDuplicate(tcp, positions)
         # print("duplicates erased")
