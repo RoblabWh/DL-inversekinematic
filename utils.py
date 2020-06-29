@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import keras.utils
 import time
+import math
 import matplotlib.animation as animation
 
 
@@ -156,7 +157,7 @@ class Drawer():
         y = np.asarray([y])
         z = np.asarray([z])
         self.robot = self.ax.plot(rx, ry, rz, 'o-', markersize=10,
-                     markerfacecolor="black", linewidth=6, color="orange", label='ground truth')
+                                  markerfacecolor="black", linewidth=6, color="orange", label='ground truth')
         self.wframe = self.ax.plot_wireframe(x, y, z)
         self.fig.canvas.draw()
         # time.sleep(0.1)
@@ -211,7 +212,7 @@ def buildDhTcpFrame(q_array):
 
 class DataHandler(object):
 
-    def __init__(self):
+    def __init__(self, euler=False):
         # self.dmax = np.radians(165)
         # self.dmin = np.radians(-168)
         # self.dmax = 165.0
@@ -223,6 +224,7 @@ class DataHandler(object):
         # self.a4 = [101, -101]
         # self.a5 = [155, -161]
 
+        self.euler = euler
         self.dmax = np.around(np.radians(169), decimals=4)
         self.dmin = np.around(np.radians(-169), decimals=4)
         self.xyzmin = -0.54
@@ -256,6 +258,42 @@ class DataHandler(object):
 
         return np.asarray(tcp)
 
+    def get_roll_pitch_yaw(self, rotation):
+        
+        pitch = math.atan2(-rotation[6], math.sqrt(math.pow(rotation[0], 2) + math.pow(rotation[3], 2)))  # beta
+
+        if pitch == np.pi or pitch == -np.pi:
+            yaw = 0
+            roll = (pitch / np.pi) * math.atan2(rotation[1], rotation[4])
+        else:
+            yaw = math.atan2(rotation[3], rotation[0])
+            roll = math.atan2(rotation[7], rotation[8])
+
+        return roll, pitch, yaw
+
+    def calc_xyz_euler(self, positions):
+        tcp = []
+        for i in range(len(positions)):
+            frame = buildDhTcpFrame(positions[i])
+            frame = np.asarray(frame.flatten())
+            frame = frame[0:12]
+            xyz_euler = np.zeros(6)
+
+            # Aufrunden des Frames
+            xyz = np.around(frame[3::4], decimals=3)
+            rotation = np.asarray([frame[0:3], frame[4:7], frame[8:11]]).flatten()
+
+            roll, pitch, yaw = self.get_roll_pitch_yaw(rotation)
+
+            xyz_euler[0:3] = xyz
+            xyz_euler[3] = np.around(roll, decimals=6)
+            xyz_euler[4] = np.around(pitch, decimals=6)
+            xyz_euler[5] = np.around(yaw, decimals=6)
+
+            tcp.append(xyz_euler)
+
+        return np.asarray(tcp)
+
     def generate_data(self, iterations):
         joint_limits = [self.a1, self.a2, self.a3, self.a4, self.a5]
         pos_arr = []
@@ -269,7 +307,10 @@ class DataHandler(object):
 
         positions = np.around(np.asarray(pos_arr), decimals=4)
 
-        tcp = self.calc_tcp(positions)
+        if not self.euler:
+            tcp = self.calc_tcp(positions)
+        else:
+            tcp = self.calc_xyz_euler(positions)
 
         return positions, tcp
 
@@ -296,12 +337,11 @@ class DataHandler(object):
 
         positions = np.around(np.asarray(pos_arr), decimals=4)
 
-        # print("positions calculated")
-        tcp = self.calc_tcp(positions)
-        # print("tcp calculated")
+        if not self.euler:
+            tcp = self.calc_tcp(positions)
+        else:
+            tcp = self.calc_xyz_euler(positions)
 
-        # positions, tcp = self.deleteDuplicate(tcp, positions)
-        # print("duplicates erased")
         return positions, tcp
 
     def deleteDuplicate(self, tcp, pos):
@@ -341,6 +381,7 @@ class DataHandler(object):
 
         return tmp
 
+    # normiert frame xyz und rotationsmatrix anhand getesteter werte
     def norm(self, tcp):
         tmp = np.copy(tcp)
         for i, arr in enumerate(tcp):
@@ -360,7 +401,27 @@ class DataHandler(object):
                     tmp[i][j] = xyz[j % 3]
         return tmp
 
-    def normd(self, tcp):
+    # normiert xyz und euler winkel
+    def normeuler(self, tcp):
+        tmp = np.copy(tcp)
+        for i, arr in enumerate(tcp):
+            xyz = arr[0:3]
+            euler = arr[3:6]
+
+            for j, value in enumerate(xyz):
+                xyz[j] = (2 * (value - self.xyzmin) / (self.xyzmax - self.xyzmin)) - 1
+            for j, value in enumerate(euler):
+                euler[j] = (2 * (value - (-np.pi)) / (np.pi - (-np.pi))) - 1
+
+            for j in range(3):
+                tmp[i][j] = xyz[j]
+            for j in range(3):
+                tmp[i][j + 3] = euler[j]
+
+        return tmp
+
+    # normiert nur xyz werte
+    def normxyz(self, tcp):
         tmp = np.copy(tcp)
         for i, arr in enumerate(tcp):
             xyz = arr[3::4]
@@ -373,6 +434,7 @@ class DataHandler(object):
                     tmp[i][j] = xyz[j % 3]
         return tmp
 
+    # normiert die gelenkwinkel
     def normalize(self, data):
         tmp = np.copy(data)
         for i, arr in enumerate(data):
@@ -380,26 +442,35 @@ class DataHandler(object):
                 tmp[i][j] = (2 * (value - self.dmin) / (self.dmax - self.dmin)) - 1
         return tmp
 
+    def do_norm(self, tpos):
+        if not self.euler:
+            tpos = self.normxyz(tpos)
+        else:
+            tpos = self.normeuler(tpos)
+
+        return tpos
+
     def make(self, batch_size):
         while True:
             jpos, tpos = self.generate_data(batch_size)
             jpos = self.normalize(jpos)
-            tpos = self.norm(tpos)
-            # tpos = keras.utils.normalize(tcp, axis=-1, order=2)
+            tpos = self.do_norm(tpos)
+
             yield (tpos, jpos)
 
     def generate_step(self, batch_size):
         jpos, tpos = self.generate_data_step(batch_size)
         jpos = self.normalize(jpos)
-        tpos = self.norm(tpos)
-        # tpos = keras.utils.normalize(tcp, axis=-1, order=2)
+        tpos = self.do_norm(tpos)
+
         return jpos, tpos
 
+    # generiert zufällig batch_size werte
     def generate(self, batch_size):
         jpos, tpos = self.generate_data(batch_size)
         jpos = self.normalize(jpos)
-        tpos = self.normd(tpos)
-        # tpos = keras.utils.normalize(tpos, axis=-1, order=2)
+        tpos = self.do_norm(tpos)
+
         return jpos, tpos
 
     def maxxyz(self, tcp):
