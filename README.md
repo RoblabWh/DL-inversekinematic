@@ -33,3 +33,8 @@ conda install theano
 conda install matplotlib
 
 pip install pytransform3d
+
+
+Im Verzeichenis
+
+jupyter notebook
