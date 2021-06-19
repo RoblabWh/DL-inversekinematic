@@ -32,7 +32,7 @@ conda install theano
 
 conda install matplotlib
 
-pip install pytransform3d
+pip install pytransform3d==1.8
 
 
 Im Verzeichenis
