@@ -1,9 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import keras.utils
 import time
 import math
 import matplotlib.animation as animation
+import copy
 
 
 class Drawer():
@@ -272,13 +272,17 @@ class DataHandler(object):
         return roll, pitch, yaw
 
     def calc_xyz_euler(self, positions):
+        start1 = time.time()
         tcp = []
+        tcp_time = 0
         for i in range(len(positions)):
+            start = time.time()
             frame = buildDhTcpFrame(positions[i])
             frame = np.asarray(frame.flatten())
             frame = frame[0:12]
             xyz_euler = np.zeros(6)
-
+            end = time.time()
+            tcp_time += end - start
             # Aufrunden des Frames
             xyz = np.around(frame[3::4], decimals=3)
             rotation = np.asarray([frame[0:3], frame[4:7], frame[8:11]]).flatten()
@@ -291,21 +295,57 @@ class DataHandler(object):
             xyz_euler[5] = np.around(yaw, decimals=6)
 
             tcp.append(xyz_euler)
-
+        
+        end2 = time.time()
+        print("DH Transformation: %.2f Sekunden" %tcp_time)
+        print("Euler Winkel: %.2f Sekunden" %(end2 - start1 - tcp_time))
         return np.asarray(tcp)
+
+    def generate_data_gauss(self, iterations=100, sigma=5):
+        '''
+        Generates Input and Output Data for the neural network.
+        Randomly generates angles according to robot limits and applys normal distribution to them for noise creation.
+        Generated angles with and without noise are used in DH transformation to get tcp for both.
+        '''
+        start = time.time()
+        joint_limits = [self.a1, self.a2, self.a3, self.a4, self.a5]
+        pos_arr = []
+        degree_joint_pos = []
+        for joint_range in joint_limits:
+            joint_vals = np.random.randint(joint_range[1], joint_range[0] + 1, iterations)
+            degree_joint_pos.append(joint_vals)
+
+        degree_joint_pos = np.asarray(degree_joint_pos)
+
+        noise = np.random.normal(0,sigma,5 * iterations).astype(int).reshape(5,iterations)
+        noised = np.add(degree_joint_pos, noise)
+        for i in range(5):
+            np.clip(noised[i], joint_limits[i][1], joint_limits[i][0], noised[i])
+        noised_pos = np.transpose(noised)
+        positions = np.transpose(degree_joint_pos)
+
+        noised_pos = np.around(np.radians(noised_pos), decimals=4)
+        positions = np.around(np.radians(positions), decimals=4)
+
+        print("Datengenerierung: %.2f Sekunden" %(time.time() - start))
+
+        if not self.euler:
+            tcp = self.calc_tcp(positions)
+            noised_tcp = self.calc_tcp(noised_pos)
+        else:
+            tcp = self.calc_xyz_euler(positions)
+            noised_tcp = self.calc_xyz_euler(noised_pos)
+
+        return positions, tcp, noised_pos, noised_tcp
 
     def generate_data(self, iterations):
         joint_limits = [self.a1, self.a2, self.a3, self.a4, self.a5]
-        pos_arr = []
-        for i in range(iterations):
-            degree_joint_pos = []
-            for joint_range in joint_limits:
-                joint_val = np.random.randint(joint_range[1], joint_range[0] + 1)
-                degree_joint_pos.append(joint_val)
-            radians = np.radians(np.asarray(degree_joint_pos))
-            pos_arr.append(radians)
 
-        positions = np.around(np.asarray(pos_arr), decimals=4)
+        degree_joint_pos = []
+        for joint_range in joint_limits:
+            degree_joint_pos.append(np.random.randint(joint_range[1], joint_range[0] + 1, iterations))
+
+        positions = np.around(np.transpose(degree_joint_pos), decimals=4)
 
         if not self.euler:
             tcp = self.calc_tcp(positions)
@@ -373,15 +413,16 @@ class DataHandler(object):
                 pass
 
     def denormalize(self, data):
-        tmp = np.copy(data)
+        tmp = copy.deepcopy(data)
 
-        for i, arr in enumerate(data):
+        for i, arr in enumerate(tmp):
             for j, value in enumerate(arr):
                 tmp[i][j] = (((value + 1) * (self.dmax - self.dmin)) / 2) + self.dmin
 
         return tmp
 
     # normiert frame xyz und rotationsmatrix anhand getesteter werte
+    # deprecated...
     def norm(self, tcp):
         tmp = np.copy(tcp)
         for i, arr in enumerate(tcp):
@@ -403,44 +444,22 @@ class DataHandler(object):
 
     # normiert xyz und euler winkel
     def normeuler(self, tcp):
-        tmp = np.copy(tcp)
-        for i, arr in enumerate(tcp):
-            xyz = arr[0:3]
-            euler = arr[3:6]
+        tmp = copy.deepcopy(tcp)
+        xyz = (2 * (tmp[:, 0:3] - self.xyzmin) / (self.xyzmax - self.xyzmin)) - 1
+        euler = (2 * (tmp[:, 3:6] - (-np.pi)) / (np.pi - (-np.pi))) - 1
 
-            for j, value in enumerate(xyz):
-                xyz[j] = (2 * (value - self.xyzmin) / (self.xyzmax - self.xyzmin)) - 1
-            for j, value in enumerate(euler):
-                euler[j] = (2 * (value - (-np.pi)) / (np.pi - (-np.pi))) - 1
-
-            for j in range(3):
-                tmp[i][j] = xyz[j]
-            for j in range(3):
-                tmp[i][j + 3] = euler[j]
-
-        return tmp
+        return np.concatenate((xyz, euler), axis=1)
 
     # normiert nur xyz werte
     def normxyz(self, tcp):
-        tmp = np.copy(tcp)
-        for i, arr in enumerate(tcp):
-            xyz = arr[3::4]
-
-            for j, value in enumerate(xyz):
-                xyz[j] = (2 * (value - self.xyzmin) / (self.xyzmax - self.xyzmin)) - 1
-
-            for j in range(12):
-                if (j == 3) or (j == 7) or (j == 11):
-                    tmp[i][j] = xyz[j % 3]
+        tmp = copy.deepcopy(tcp)
+        tmp[:, 3::4] = (2 * (tmp[:, 3::4] - self.xyzmin) / (self.xyzmax - self.xyzmin)) - 1
         return tmp
 
     # normiert die gelenkwinkel
     def normalize(self, data):
-        tmp = np.copy(data)
-        for i, arr in enumerate(data):
-            for j, value in enumerate(arr):
-                tmp[i][j] = (2 * (value - self.dmin) / (self.dmax - self.dmin)) - 1
-        return tmp
+        tmp = copy.deepcopy(data)
+        return ((2 * (tmp - self.dmin) / (self.dmax - self.dmin)) - 1)
 
     def do_norm(self, tpos):
         if not self.euler:
@@ -464,6 +483,20 @@ class DataHandler(object):
         tpos = self.do_norm(tpos)
 
         return jpos, tpos
+
+    def generate_gauss(self, batch_size, sigma=5):
+        begin = time.time()
+        jpos, tpos, njpos, ntpos = self.generate_data_gauss(batch_size, sigma)
+        start = time.time()
+        jpos = self.normalize(jpos)
+        njpos = self.normalize(njpos)
+        tpos = self.do_norm(tpos)
+        ntpos = self.do_norm(ntpos)
+        normalizing_time = time.time() - start
+        print("Normalisierung: %.2f Sekunden" %(normalizing_time))
+        print("Gesamt:  %.2f Sekunden" %(time.time() - begin))
+
+        return np.concatenate((jpos, tpos, ntpos), axis=1), njpos
 
     # generiert zufällig batch_size werte
     def generate(self, batch_size):
