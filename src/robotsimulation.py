@@ -11,6 +11,7 @@ import ipywidgets as widgets
 from pytransform3d.rotations import *
 from mpl_toolkits.mplot3d import proj3d
 import os
+import sys
 
 class Robot():
     def __init__(self, dh_values=None, joint_limits=None, robot=None):
@@ -454,16 +455,29 @@ class DataHandler(object):
 
         self.dmax = np.around(np.radians(np.max(self.robot.joint_limits)), decimals=4)
         self.dmin = np.around(np.radians(np.min(self.robot.joint_limits)), decimals=4)
-        self.xyzmin = -np.sum(self.robot.dh_values[1:3])
-        self.xyzmax = np.sum(self.robot.dh_values[1:3])
         
-        # TODO FÜR JEDEN ROBOTER BERECHENN!!!
-        #self.xyzmin = -0.54
-        #self.xyzmax = 0.59
+        self.y_max = -float('inf')
+        self.y_min = float('inf')
+        self.x_max = -float('inf')
+        self.x_min = float('inf')
+        self.z_max = -float('inf')
+        self.z_min = float('inf')
         self.rotatemin = -1
         self.rotatemax = 1
-        # TODO FÜR JEDEN ROBOTER BERECHENN!!!
 
+    def get_roll_pitch_yaw(self, rotation):
+        
+        pitch = math.atan2(-rotation[6], math.sqrt(math.pow(rotation[0], 2) + math.pow(rotation[3], 2)))  # beta
+
+        if pitch == np.pi or pitch == -np.pi:
+            yaw = 0
+            roll = (pitch / np.pi) * math.atan2(rotation[1], rotation[4])
+        else:
+            yaw = math.atan2(rotation[3], rotation[0])
+            roll = math.atan2(rotation[7], rotation[8])
+
+        return roll, pitch, yaw
+    
     def calc_tcp(self, positions):
         tcp = []
         for i in range(len(positions)):
@@ -483,19 +497,6 @@ class DataHandler(object):
             tcp.append(frame)
 
         return np.asarray(tcp)
-
-    def get_roll_pitch_yaw(self, rotation):
-        
-        pitch = math.atan2(-rotation[6], math.sqrt(math.pow(rotation[0], 2) + math.pow(rotation[3], 2)))  # beta
-
-        if pitch == np.pi or pitch == -np.pi:
-            yaw = 0
-            roll = (pitch / np.pi) * math.atan2(rotation[1], rotation[4])
-        else:
-            yaw = math.atan2(rotation[3], rotation[0])
-            roll = math.atan2(rotation[7], rotation[8])
-
-        return roll, pitch, yaw
 
     def calc_xyz_euler(self, positions):
         start1 = time.time()
@@ -556,7 +557,7 @@ class DataHandler(object):
             print("Too few samples to generate. Either turn off generation of extreme positions or "
                   "generate more Data.\n", self.split ** len(self.robot.joint_limits), "extreme positions "
                   "must be generated but you only generate", n, "samples.")
-            exit(1)
+            sys.exit(1)
         elif self.compute_extreme_positions:
             n -= self.split ** len(self.robot.joint_limits)
             extremes = self.get_extreme_positions()
@@ -592,7 +593,9 @@ class DataHandler(object):
         noised_pos = np.around(np.radians(noised_pos), decimals=4)
         positions = np.around(np.radians(positions), decimals=4)
 
-        print("Datengenerierung: %.2f Sekunden" %(time.time() - start))
+        print("Generierung der Gelenkwinkel: %.2f Sekunden" %(time.time() - start))
+
+        start = time.time()
 
         if not self.euler:
             tcp = self.calc_tcp(positions)
@@ -601,7 +604,11 @@ class DataHandler(object):
             tcp = self.calc_xyz_euler(positions)
             noised_tcp = self.calc_xyz_euler(noised_pos)
 
-        return positions, tcp, noised_pos, noised_tcp
+        print("Generierung des TCPs: %.2f Sekunden" %(time.time() - start))
+
+        relative_tcp = np.subtract(noised_tcp, tcp)
+
+        return positions, tcp, noised_pos, relative_tcp
 
     def generate_data(self, iterations):
 
@@ -610,58 +617,60 @@ class DataHandler(object):
         positions = self.generate_n_positions(iterations)
         positions = np.around(np.radians(positions), decimals=4)
 
-        print("Datengenerierung: %.2f Sekunden" %(time.time() - start))
+        print("Generierung der Gelenkwinkel: %.2f Sekunden" %(time.time() - start))
+
+        start = time.time()
 
         if not self.euler:
             tcp = self.calc_tcp(positions)
         else:
             tcp = self.calc_xyz_euler(positions)
+        
+        print("Generierung des TCPs: %.2f Sekunden" %(time.time() - start))
 
         return positions, tcp
 
-    def deleteDuplicate(self, tcp, pos):
-        isDuplicate = []
-        for i in range(len(tcp)):
-            if (i % 10000) == 0:
-                print("Durchlauf ", i)
-            xyz = tcp[i][3::4]
-            for j in range((i + 1), len(tcp)):
-                xyz_ = tcp[j][3::4]
-                if np.isclose(xyz[0], xyz_[0], rtol=1e-02):
-                    if np.isclose(xyz[1], xyz_[1], rtol=1e-02):
-                        if np.isclose(xyz[2], xyz_[2], rtol=1e-02):
-                            print("Found Duplicate.. ", xyz[0], xyz_[0], xyz[1], xyz_[1], xyz[2], xyz_[2])
-                # if np.isclose(xyz[0], xyz_[0], rtol=1e-03) and np.isclose(xyz[1], xyz_[1], rtol=1e-03) and np.isclose(xyz[2], xyz_[2], rtol=1e-03):
-                #     print(i)
-                #     isDuplicate.append(i)
-
-        #     print(len(isDuplicate))
-        new_tcp = np.delete(tcp, isDuplicate, 0)
-        new_joint_pos = np.delete(pos, isDuplicate, 0)
-        return new_joint_pos, new_tcp
-
-    def makeUnique(self, tcp, pos):
-        seen = set()
-        for i in range(len(tcp) - 1, -1, -1):
-            xyz = tcp[i][3::4]
-            if xyz in seen:
-                pass
-
     def denormalize(self, data):
+        '''
+        Denormalizes joint angles
+        '''
         tmp = copy.deepcopy(data)
+        num_joints = tmp.shape[1]
 
-        for i, arr in enumerate(tmp):
-            for j, value in enumerate(arr):
-                tmp[i][j] = (((value + 1) * (self.dmax - self.dmin)) / 2) + self.dmin
+        for i in range(num_joints):
+            joint_max, joint_min = self.robot.joint_limits[i]
+            tmp[:, i] = (((tmp[:, i] + 1) * (np.radians(joint_max) - np.radians(joint_min))) / 2) + np.radians(joint_min)
 
         return tmp
 
+    # def normeuler(self, tcp):
+    #     '''
+    #     Normalizes XYZ and euler angles
+    #     '''
+    #     tmp = copy.deepcopy(tcp)
+    #     xyz = (2 * (tmp[:, 0:3] - self.xyzmin) / (self.xyzmax - self.xyzmin)) - 1
+    #     euler = (2 * (tmp[:, 3:6] - (-np.pi)) / (np.pi - (-np.pi))) - 1
+
+    #     return np.concatenate((xyz, euler), axis=1)
+
+    # def normxyz(self, tcp):
+    #     '''
+    #     Normalizes tcp
+    #     '''
+    #     tmp = copy.deepcopy(tcp)
+    #     tmp[:, 3::4] = (2 * (tmp[:, 3::4] - self.xyzmin) / (self.xyzmax - self.xyzmin)) - 1
+    #     return tmp
+    
     def normeuler(self, tcp):
         '''
         Normalizes XYZ and euler angles
         '''
         tmp = copy.deepcopy(tcp)
-        xyz = (2 * (tmp[:, 0:3] - self.xyzmin) / (self.xyzmax - self.xyzmin)) - 1
+        xyz = np.zeros(tmp[:, 0:3].shape)
+        xyz[:, 0] = (2 * (tmp[:, 0] - self.x_min) / (self.x_max - self.x_min)) - 1
+        xyz[:, 1] = (2 * (tmp[:, 1] - self.y_min) / (self.y_max - self.y_min)) - 1
+        xyz[:, 2] = (2 * (tmp[:, 2] - self.z_min) / (self.z_max - self.z_min)) - 1
+        
         euler = (2 * (tmp[:, 3:6] - (-np.pi)) / (np.pi - (-np.pi))) - 1
 
         return np.concatenate((xyz, euler), axis=1)
@@ -670,16 +679,26 @@ class DataHandler(object):
         '''
         Normalizes tcp
         '''
-        tmp = copy.deepcopy(tcp)
-        tmp[:, 3::4] = (2 * (tmp[:, 3::4] - self.xyzmin) / (self.xyzmax - self.xyzmin)) - 1
-        return tmp
+        xyz = copy.deepcopy(tcp)
+        xyz[:, 3] = (2 * (xyz[:, 3] - self.x_min) / (self.x_max - self.x_min)) - 1
+        xyz[:, 7] = (2 * (xyz[:, 7] - self.y_min) / (self.y_max - self.y_min)) - 1
+        xyz[:, 11] = (2 * (xyz[:, 11] - self.z_min) / (self.z_max - self.z_min)) - 1
+
+        return xyz
 
     def normalize_joint_angles(self, data):
         '''
         Normalizes joint angles
         '''
         tmp = copy.deepcopy(data)
-        return ((2 * (tmp - self.dmin) / (self.dmax - self.dmin)) - 1)
+        num_joints = tmp.shape[1]
+        normalized_data = np.zeros(tmp.shape)
+
+        for i in range(num_joints):
+            joint_max, joint_min = self.robot.joint_limits[i]
+            normalized_data[:, i] = ((2 * (tmp[:, i] - np.radians(joint_min)) / (np.radians(joint_max) - np.radians(joint_min))) - 1)
+
+        return normalized_data
 
     def normalize_tcp(self, tpos):
         if not self.euler:
@@ -689,12 +708,13 @@ class DataHandler(object):
 
         return tpos
 
-    def generate_noised(self, batch_size, sigma=5):
+    def generate_noised(self, batch_size, sigma=60):
         begin = time.time()
         jpos, tpos, njpos, ntpos = self.generate_noised_data(batch_size, sigma)
         start = time.time()
         jpos = self.normalize_joint_angles(jpos)
         njpos = self.normalize_joint_angles(njpos)
+        self.set_maxima(tpos)
         tpos = self.normalize_tcp(tpos)
         ntpos = self.normalize_tcp(ntpos)
         normalizing_time = time.time() - start
@@ -708,6 +728,7 @@ class DataHandler(object):
         jpos, tpos = self.generate_data(batch_size)
         start = time.time()
         jpos = self.normalize_joint_angles(jpos)
+        self.set_maxima(tpos)
         tpos = self.normalize_tcp(tpos)
         normalizing_time = time.time() - start
         print("Normalisierung: %.2f Sekunden" %(normalizing_time))
@@ -715,25 +736,26 @@ class DataHandler(object):
 
         return jpos, tpos
 
-    def maxxyz(self, tcp):
-        tcps = []
-        # remove loop with numpy calculation
-        for arr in tcp:
-            xyz = np.array([arr[3], arr[7], arr[11]])
-            tcps.append(xyz)
-        tcps = np.asarray(tcps)
-        max = np.amax(tcps)
-        min = np.amin(tcps)
-        print("xyz max: ", max)
-        print("xyz min: ", min)
+    def set_maxima(self, tcp):
+        if not self.euler:
+            x_s = tcp[:, 3].flatten()
+            y_s = tcp[:, 7].flatten()
+            z_s = tcp[:, 11].flatten()
+        else:
+            x_s = tcp[:, 0].flatten()
+            y_s = tcp[:, 1].flatten()
+            z_s = tcp[:, 2].flatten()
 
-    def maxradian(self, tcp):
-        frames = []
-        for arr in tcp:
-            frame = np.asarray([arr[0:3], arr[4:7], arr[8:11]]).flatten()
-            frames.append(frame)
-        frames = np.asarray(frames)
-        max = np.amax(frames)
-        min = np.amin(frames)
-        print("max rad: ", max)
-        print("min rad: ", min)
+        xmax = np.amax(x_s)
+        xmin = np.amin(x_s)
+        ymax = np.amax(y_s)
+        ymin = np.amin(y_s)
+        zmax = np.amax(z_s)
+        zmin = np.amin(z_s)
+
+        if xmax > self.x_max: self.x_max = xmax
+        if xmin < self.x_min: self.x_min = xmin
+        if ymax > self.y_max: self.y_max = ymax
+        if ymin < self.y_min: self.y_min = ymin
+        if zmax > self.z_max: self.z_max = zmax
+        if zmin < self.z_min: self.z_min = zmin
