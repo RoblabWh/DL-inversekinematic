@@ -1,4 +1,4 @@
-# DL-inversekinematic
+# DL-Inversekinematic
 
 
 Diese Notebook gibt einen Einführung in das Thema Deep Learning mit Keras. 
@@ -7,19 +7,13 @@ Dabei zeigen wir wie ein solches Netz mit Keras erzeugt wird und wie man es trai
 
 ## Anaconda
 
-Zur Ausführung dieses Notebooks können Sie Anaconda installieren. Anaconda bietet den Vorteil
-Python Packages leicht zu installieren und zu managen, sowie eine virtuelle Umgebung für seine
-Python Packages zu erstellen. Laden Sie sich dazu das Installationsskript herunter und führen
-Sie es aus:
-
-<pre><code>wget https://repo.anaconda.com/archive/Anaconda3-2020.02-Linux-x86_64.sh
-chmod +x Anaconda3-2020.02-Linux-x86_64.sh
-./Anaconda3-2020.02-Linux-x86_64.sh
-</code></pre>
-
-Ein weiterer Vorteil von Anaconda ist es, dass Sie Ihre Umgebungen in Requirement-Files exportieren
-können und Sie später wieder neue conda-Umgebungen aus diesen Files erstellen können:
+Zur Ausführung dieses Notebooks können Sie [Anaconda](https://docs.anaconda.com/anaconda/install/) installieren. Anaconda bietet den Vorteil Python Packages leicht zu installieren und zu managen, sowie eine virtuelle Umgebung für seine Python Packages zu erstellen.
 
 ## REQUIREMENTS
 
-
+<pre><code>numpy
+matplotlib
+tensorflow[and-cuda]
+ipympl
+tqdm
+</code></pre>

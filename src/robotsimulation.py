@@ -407,7 +407,7 @@ class RobotAnimation(object):
         #self.ax.set_ylabel('Y axis')
         #self.ax.set_zlabel('Z axis')
 
-    def draw_trajectory_robot(self, trajectory):
+    def draw_trajectory_robot(self, trajectory, repeat=False):
         self.robot_states = []
 
         for n in range(len(trajectory)):
@@ -415,20 +415,16 @@ class RobotAnimation(object):
             self.robot_states.append([coordinates, rotation])
 
         self.set_ax()
-
-        self.ani = animation.FuncAnimation(self.fig, self.update_trajectory_robot, interval=400, cache_frame_data=False)
+        self.ani = animation.FuncAnimation(self.fig, self.update_trajectory_robot, frames=len(self.robot_states), interval=300, cache_frame_data=False, repeat=repeat, blit=True)
         plt.show()
 
     def update_trajectory_robot(self, idx):
-        if idx != len(self.robot_states):
-            if self.wframe:
-                self.ax.collections.remove(self.wframe)
-                self.ax.clear()
-                self.set_ax()
+        self.ax.clear()
+        self.set_ax()
         
         coordinates = self.robot_states[idx][0]
         rotation = self.robot_states[idx][1]
-        #os.write(1, str(coordinates))
+        #os.write(1, str(framers))
 
         x = self.robot_states[idx][0][0] * self.robotscale
         y = self.robot_states[idx][0][1] * self.robotscale
@@ -441,12 +437,13 @@ class RobotAnimation(object):
         self.plot_positions(coordinates, rotation)
 
         self.wframe = self.ax.plot_wireframe(np.array([self.xw]), np.array([self.yw]), np.array([self.zw]))
-        self.fig.canvas.draw()
+        if idx == len(self.robot_states) - 1:
+            self.fig.canvas.draw_idle()
         # time.sleep(0.1)
 
 class DataHandler(object):
 
-    def __init__(self, robot, euler=False):
+    def __init__(self, robot, euler=False, verbose=False):
 
         self.euler = euler
         self.compute_extreme_positions = False
@@ -464,6 +461,8 @@ class DataHandler(object):
         self.z_min = float('inf')
         self.rotatemin = -1
         self.rotatemax = 1
+        
+        self.verbose = verbose
 
     def get_roll_pitch_yaw(self, rotation):
         
@@ -524,8 +523,9 @@ class DataHandler(object):
             tcp.append(xyz_euler)
         
         end2 = time.time()
-        print("DH Transformation: %.2f Sekunden" %tcp_time)
-        print("Euler Winkel: %.2f Sekunden" %(end2 - start1 - tcp_time))
+        if self.verbose:
+            print("DH Transformation: %.2f Sekunden" %tcp_time)
+            print("Euler Winkel: %.2f Sekunden" %(end2 - start1 - tcp_time))
         return np.asarray(tcp)
 
     def get_extreme_positions(self):
@@ -585,15 +585,15 @@ class DataHandler(object):
 
         noise = np.random.normal(0, sigma, len(self.robot.joint_limits) * iterations).astype(int).reshape(iterations, len(self.robot.joint_limits))
         noised = np.transpose(np.add(positions, noise))
-
         for i in range(len(self.robot.joint_limits)):
-            np.clip(noised[i], self.robot.joint_limits[i][1], self.robot.joint_limits[i][0], noised[i])
+            np.clip(noised[i], self.robot.joint_limits[i][1], self.robot.joint_limits[i][0], noised[i], casting='unsafe')
         noised_pos = np.transpose(noised)
 
         noised_pos = np.around(np.radians(noised_pos), decimals=4)
         positions = np.around(np.radians(positions), decimals=4)
 
-        print("Generierung der Gelenkwinkel: %.2f Sekunden" %(time.time() - start))
+        if self.verbose:
+            print("Generierung der Gelenkwinkel: %.2f Sekunden" %(time.time() - start))
 
         start = time.time()
 
@@ -604,7 +604,8 @@ class DataHandler(object):
             tcp = self.calc_xyz_euler(positions)
             noised_tcp = self.calc_xyz_euler(noised_pos)
 
-        print("Generierung des TCPs: %.2f Sekunden" %(time.time() - start))
+        if self.verbose:
+            print("Generierung des TCPs: %.2f Sekunden" %(time.time() - start))
 
         relative_tcp = np.subtract(noised_tcp, tcp)
 
@@ -617,7 +618,8 @@ class DataHandler(object):
         positions = self.generate_n_positions(iterations)
         positions = np.around(np.radians(positions), decimals=4)
 
-        print("Generierung der Gelenkwinkel: %.2f Sekunden" %(time.time() - start))
+        if self.verbose:
+            print("Generierung der Gelenkwinkel: %.2f Sekunden" %(time.time() - start))
 
         start = time.time()
 
@@ -625,8 +627,8 @@ class DataHandler(object):
             tcp = self.calc_tcp(positions)
         else:
             tcp = self.calc_xyz_euler(positions)
-        
-        print("Generierung des TCPs: %.2f Sekunden" %(time.time() - start))
+        if self.verbose:
+            print("Generierung des TCPs: %.2f Sekunden" %(time.time() - start))
 
         return positions, tcp
 
@@ -718,8 +720,9 @@ class DataHandler(object):
         tpos = self.normalize_tcp(tpos)
         ntpos = self.normalize_tcp(ntpos)
         normalizing_time = time.time() - start
-        print("Normalisierung: %.2f Sekunden" %(normalizing_time))
-        print("Gesamt:  %.2f Sekunden" %(time.time() - begin))
+        if self.verbose:
+            print("Normalisierung: %.2f Sekunden" %(normalizing_time))
+            print("Gesamt:  %.2f Sekunden" %(time.time() - begin))
 
         return np.concatenate((jpos, tpos, ntpos), axis=1), njpos
 
@@ -731,8 +734,9 @@ class DataHandler(object):
         self.set_maxima(tpos)
         tpos = self.normalize_tcp(tpos)
         normalizing_time = time.time() - start
-        print("Normalisierung: %.2f Sekunden" %(normalizing_time))
-        print("Gesamt:  %.2f Sekunden" %(time.time() - begin))
+        if self.verbose:
+            print("Normalisierung: %.2f Sekunden" %(normalizing_time))
+            print("Gesamt:  %.2f Sekunden" %(time.time() - begin))
 
         return jpos, tpos
 
