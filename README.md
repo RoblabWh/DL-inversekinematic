@@ -11,9 +11,11 @@ Zur Ausführung dieses Notebooks können Sie [Anaconda](https://docs.anaconda.co
 
 ## REQUIREMENTS
 
-<pre><code>numpy
+<pre>numpy
 matplotlib
-tensorflow[and-cuda]
 ipympl
 tqdm
-</code></pre>
+</pre>
+
+Sie können als Deep Learning Framework entweder [Tensorflow](https://www.tensorflow.org/install/pip) <code>pip install tensorflow[and-cuda]</code> oder [PyTorch](https://pytorch.org/get-started/locally/) <code>pip install torch</code> nutzen.
+
