@@ -17,5 +17,5 @@ ipympl
 tqdm
 </pre>
 
-Sie können als Deep Learning Framework entweder [Tensorflow](https://www.tensorflow.org/install/pip) <code>pip install tensorflow[and-cuda]</code> oder [PyTorch](https://pytorch.org/get-started/locally/) <code>pip install torch</code> nutzen.
+Als Deep Learning Framework wird [PyTorch](https://pytorch.org/get-started/locally/) <code>pip install torch</code> unterstützt. Ältere Varianten laufen teilweise noch mit [Tensorflow](https://www.tensorflow.org/install/pip).
 
