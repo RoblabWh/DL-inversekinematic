@@ -1,5 +1,6 @@
 from src.datahandler import DataHandler
 import torch
+import torch.optim as optim
 from tqdm import tqdm
 
 class Trainer():
@@ -12,6 +13,7 @@ class Trainer():
         self.tcp_loss = False
         
     def __call__(self, datahandler : DataHandler, samples : int, epochs : int, batch_size : int, validation_split=0.05):
+        scheduler = optim.lr_scheduler.OneCycleLR(self.optimizer, max_lr=0.001, total_steps=epochs*(samples//batch_size))
         if self.tcp_loss and (datahandler.relative or datahandler.noised):
             print("TCP Loss is currently only supported for non-relative data without noise.")
             return
@@ -40,6 +42,7 @@ class Trainer():
                 
                 loss.backward()
                 self.optimizer.step()
+                scheduler.step()
                 train_loss += loss.item()
                 tqdm_iterator.set_postfix(loss=loss.item())
                 

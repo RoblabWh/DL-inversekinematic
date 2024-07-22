@@ -20,6 +20,7 @@ class DataHandler(object):
         self.dmax = np.around(np.radians(np.max(self.robot.joint_limits)), decimals=4)
         self.dmin = np.around(np.radians(np.min(self.robot.joint_limits)), decimals=4)
         
+        self.normrange = "minus1to1"
         self.y_max = -float('inf')
         self.y_min = float('inf')
         self.x_max = -float('inf')
@@ -342,7 +343,10 @@ class DataHandler(object):
             joint_max, joint_min = self.robot.joint_limits[i]
             max_rad = deg2rad(joint_max if not self.use_torch else torch.tensor(joint_max, dtype=torch.float32, device=data.device))
             min_rad = deg2rad(joint_min if not self.use_torch else torch.tensor(joint_min, dtype=torch.float32, device=data.device))
-            normalized_data[:, i] = ((2 * (tmp[:, i] - min_rad) / (max_rad - min_rad)) - 1)
+            if self.normrange == "minus1to1":
+                normalized_data[:, i] = ((2 * (tmp[:, i] - min_rad) / (max_rad - min_rad)) - 1)
+            else:
+                normalized_data[:, i] = (tmp[:, i] - min_rad) / (max_rad - min_rad)
 
         return normalized_data
 
@@ -363,7 +367,10 @@ class DataHandler(object):
             joint_max, joint_min = self.robot.joint_limits[i]
             max_rad = deg2rad(joint_max if not self.use_torch else torch.tensor(joint_max, dtype=torch.float32, device=data.device))
             min_rad = deg2rad(joint_min if not self.use_torch else torch.tensor(joint_min, dtype=torch.float32, device=data.device))
-            denorm_data[:, i] = (((denorm_data[:, i] + 1) * (max_rad - min_rad)) / 2) + min_rad
+            if self.normrange == "minus1to1":
+                denorm_data[:, i] = (((denorm_data[:, i] + 1) * (max_rad - min_rad)) / 2) + min_rad
+            else:
+                denorm_data[:, i] = (denorm_data[:, i] * (max_rad - min_rad)) + min_rad
 
         return denorm_data
     
@@ -415,9 +422,14 @@ class DataHandler(object):
             xyz = np.zeros(tmp[:, 0:3].shape)
             cat = np.concatenate
             
-        xyz[:, 0] = (2 * (tmp[:, 0] - self.x_min) / (self.x_max - self.x_min)) - 1
-        xyz[:, 1] = (2 * (tmp[:, 1] - self.y_min) / (self.y_max - self.y_min)) - 1
-        xyz[:, 2] = (2 * (tmp[:, 2] - self.z_min) / (self.z_max - self.z_min)) - 1
+        if self.normrange == "minus1to1":
+            xyz[:, 0] = (2 * (tmp[:, 0] - self.x_min) / (self.x_max - self.x_min)) - 1
+            xyz[:, 1] = (2 * (tmp[:, 1] - self.y_min) / (self.y_max - self.y_min)) - 1
+            xyz[:, 2] = (2 * (tmp[:, 2] - self.z_min) / (self.z_max - self.z_min)) - 1
+        else:
+            xyz[:, 0] = (tmp[:, 0] - self.x_min) / (self.x_max - self.x_min)
+            xyz[:, 1] = (tmp[:, 1] - self.y_min) / (self.y_max - self.y_min)
+            xyz[:, 2] = (tmp[:, 2] - self.z_min) / (self.z_max - self.z_min)
         
         euler = (2 * (tmp[:, 3:6] - (-pi)) / (pi - (-pi))) - 1
 
@@ -432,9 +444,14 @@ class DataHandler(object):
         else:
             xyz = copy.deepcopy(tcp)
             
-        xyz[:, 3] = (2 * (xyz[:, 3] - self.x_min) / (self.x_max - self.x_min)) - 1
-        xyz[:, 7] = (2 * (xyz[:, 7] - self.y_min) / (self.y_max - self.y_min)) - 1
-        xyz[:, 11] = (2 * (xyz[:, 11] - self.z_min) / (self.z_max - self.z_min)) - 1
+        if self.normrange == "minus1to1":
+            xyz[:, 3] = (2 * (xyz[:, 3] - self.x_min) / (self.x_max - self.x_min)) - 1
+            xyz[:, 7] = (2 * (xyz[:, 7] - self.y_min) / (self.y_max - self.y_min)) - 1
+            xyz[:, 11] = (2 * (xyz[:, 11] - self.z_min) / (self.z_max - self.z_min)) - 1
+        else:
+            xyz[:, 3] = (xyz[:, 3] - self.x_min) / (self.x_max - self.x_min)
+            xyz[:, 7] = (xyz[:, 7] - self.y_min) / (self.y_max - self.y_min)
+            xyz[:, 11] = (xyz[:, 11] - self.z_min) / (self.z_max - self.z_min)
 
         return xyz
 
@@ -458,12 +475,18 @@ class DataHandler(object):
             tmp = copy.deepcopy(tcp)
             xyz = np.zeros(tmp[:, 0:3].shape)
             cat = np.concatenate
+        if self.normrange == "minus1to1":
+            xyz[:, 0] = (tmp[:, 0] + 1) * (self.x_max - self.x_min) / 2 + self.x_min
+            xyz[:, 1] = (tmp[:, 1] + 1) * (self.y_max - self.y_min) / 2 + self.y_min
+            xyz[:, 2] = (tmp[:, 2] + 1) * (self.z_max - self.z_min) / 2 + self.z_min
 
-        xyz[:, 0] = (tmp[:, 0] + 1) * (self.x_max - self.x_min) / 2 + self.x_min
-        xyz[:, 1] = (tmp[:, 1] + 1) * (self.y_max - self.y_min) / 2 + self.y_min
-        xyz[:, 2] = (tmp[:, 2] + 1) * (self.z_max - self.z_min) / 2 + self.z_min
+            euler = (tmp[:, 3:6] + 1) * (pi - (-pi)) / 2 + (-pi)
+        else:
+            xyz[:, 0] = tmp[:, 0] * (self.x_max - self.x_min) + self.x_min
+            xyz[:, 1] = tmp[:, 1] * (self.y_max - self.y_min) + self.y_min
+            xyz[:, 2] = tmp[:, 2] * (self.z_max - self.z_min) + self.z_min
 
-        euler = (tmp[:, 3:6] + 1) * (pi - (-pi)) / 2 + (-pi)
+            euler = tmp[:, 3:6] * (pi - (-pi)) + (-pi)
 
         return cat((xyz, euler), axis=1)
     
@@ -476,9 +499,14 @@ class DataHandler(object):
         else:
             xyz = copy.deepcopy(tcp)
 
-        xyz[:, 3] = (xyz[:, 3] + 1) * (self.x_max - self.x_min) / 2 + self.x_min
-        xyz[:, 7] = (xyz[:, 7] + 1) * (self.y_max - self.y_min) / 2 + self.y_min
-        xyz[:, 11] = (xyz[:, 11] + 1) * (self.z_max - self.z_min) / 2 + self.z_min
+        if self.normrange == "minus1to1":
+            xyz[:, 3] = (xyz[:, 3] + 1) * (self.x_max - self.x_min) / 2 + self.x_min
+            xyz[:, 7] = (xyz[:, 7] + 1) * (self.y_max - self.y_min) / 2 + self.y_min
+            xyz[:, 11] = (xyz[:, 11] + 1) * (self.z_max - self.z_min) / 2 + self.z_min
+        else:
+            xyz[:, 3] = xyz[:, 3] * (self.x_max - self.x_min) + self.x_min
+            xyz[:, 7] = xyz[:, 7] * (self.y_max - self.y_min) + self.y_min
+            xyz[:, 11] = xyz[:, 11] * (self.z_max - self.z_min) + self.z_min
 
         return xyz
     
