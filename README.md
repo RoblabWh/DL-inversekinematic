@@ -11,11 +11,7 @@ Zur Ausführung dieses Notebooks können Sie [Anaconda](https://docs.anaconda.co
 
 ## REQUIREMENTS
 
-<pre>numpy
-matplotlib
-ipympl
-tqdm
-</pre>
+<code>pip install -r requirements.txt</code>
 
-Als Deep Learning Framework wird [PyTorch](https://pytorch.org/get-started/locally/) <code>pip install torch</code> unterstützt. Ältere Varianten laufen teilweise noch mit [Tensorflow](https://www.tensorflow.org/install/pip).
+Als Deep Learning Framework wird [PyTorch](https://pytorch.org/get-started/locally/) genutzt. Folgen Sie zur Installation den Anweisungen im Link.
 

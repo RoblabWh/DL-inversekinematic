@@ -1,0 +1,7 @@
+numpy>=1.26
+matplotlib>=3.9
+ipympl>=0.9
+tqdm>=4.66
+jupyter>=1.0
+susi>=1.4
+pytransform3d>=3.5
