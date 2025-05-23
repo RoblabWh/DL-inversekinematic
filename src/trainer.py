@@ -13,7 +13,8 @@ class Trainer():
         self.tcp_loss = False
         
     def __call__(self, datahandler : DataHandler, samples : int, epochs : int, batch_size : int, validation_split=0.05):
-        scheduler = optim.lr_scheduler.OneCycleLR(self.optimizer, max_lr=0.001, total_steps=epochs*(samples//batch_size))
+        #scheduler = optim.lr_scheduler.OneCycleLR(self.optimizer, max_lr=0.001, total_steps=epochs*(samples//batch_size))
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=10, verbose=True)
         if self.tcp_loss and (datahandler.relative or datahandler.noised):
             print("TCP Loss is currently only supported for non-relative data without noise.")
             return
@@ -42,7 +43,6 @@ class Trainer():
                 
                 loss.backward()
                 self.optimizer.step()
-                scheduler.step()
                 train_loss += loss.item()
                 tqdm_iterator.set_postfix(loss=loss.item())
                 
@@ -54,6 +54,8 @@ class Trainer():
                 for inputs, target in val_loader:
                     output = self.model(inputs)
                     val_loss += self.criterion(output, target).item()
+            
+            scheduler.step(val_loss)
                     
             val_loss /= len(val_loader)
             

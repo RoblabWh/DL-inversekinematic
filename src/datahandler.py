@@ -5,7 +5,9 @@ import copy
 import sys
 
 import torch
+import warnings
 from torch.utils.data import DataLoader, TensorDataset
+from itertools import product
 from src.robot import Robot
 
 class DataHandler(object):
@@ -13,7 +15,7 @@ class DataHandler(object):
     def __init__(self, robot : Robot, euler=False, verbose=False):
 
         self.euler = euler
-        self.compute_extreme_positions = False
+        self.compute_extreme_positions = True
         self.split = 4
         self.robot = robot
 
@@ -38,6 +40,7 @@ class DataHandler(object):
         self.relative = False
         self.noised = False
         self.normalize = True
+        self.init_maxima = False # Get's set to True when the first data is generated
         
     def set_torch(self, use_torch):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -80,39 +83,6 @@ class DataHandler(object):
             zeros_like = np.zeros_like
             isclose = np.isclose
             pi = np.pi
-            
-        # print("Rotation shape: ", rotation.shape)
-        # print("Rotation: ", rotation[0])
-        # print("Rotation 0: ", rotation[0, 0, 0])
-        # print("Rotation 1: ", rotation[0, 1, 0])
-        # print("Rotation 2: ", rotation[0, 2, 0])
-        # print("Rotation 3: ", rotation[0, 0, 1])
-        # print("Rotation 4: ", rotation[0, 1, 1])
-        # print("Rotation 5: ", rotation[0, 2, 1])
-        # print("Rotation 6: ", rotation[0, 0, 2])
-        # print("Rotation 7: ", rotation[0, 1, 2])
-        # print("Rotation 8: ", rotation[0, 2, 2])
-
-        # pitch = torch.atan2(-rotation[6], torch.sqrt(rotation[0]**2 + rotation[3]**2))  # beta
-
-        # pi = torch.tensor(math.pi, device=rotation.device)
-        # condition = torch.isclose(pitch, pi) | torch.isclose(pitch, -pi)
-
-        # yaw = torch.where(condition, torch.tensor(0.0, device=rotation.device), torch.atan2(rotation[3], rotation[0]))
-        # roll = torch.where(condition, (pitch / pi) * torch.atan2(rotation[1], rotation[4]), torch.atan2(rotation[7], rotation[8]))
-
-        # return roll, pitch, yaw
-        
-        # pitch = np.arctan2(-rotation[6], np.sqrt(np.power(rotation[0], 2) + np.power(rotation[3], 2)))  # beta
-
-        # if pitch == np.pi or pitch == -np.pi:
-        #     yaw = 0
-        #     roll = (pitch / np.pi) * np.arctan2(rotation[1], rotation[4])
-        # else:
-        #     yaw = np.arctan2(rotation[3], rotation[0])
-        #     roll = np.arctan2(rotation[7], rotation[8])
-        
-        # return roll, pitch, yaw
         
         sy = sqrt(rotation[:, 0, 0] ** 2 + rotation[:, 1, 0] ** 2)
     
@@ -156,30 +126,6 @@ class DataHandler(object):
                 tcp[:, j] = xyz[:, j % 3]
 
             return tcp
-        # tcp = []
-        # for i in range(len(positions)):
-        #     frame = self.robot.buildDhTcpFrame(positions[i])
-        #     frame = frame.flatten()[:12]
-
-        #     # TODO Maybe Aufrunden des Frames
-        #     xyz = frame[3::4]
-        #     if self.use_torch:
-        #         rotation = torch.round(torch.stack([frame[0:3], frame[4:7], frame[8:11]], dim=0).flatten(), decimals=9)
-        #     else:
-        #         rotation = np.around(np.asarray([frame[0:3], frame[4:7], frame[8:11]]).flatten(), decimals=9)
-
-        #     for j in range(12):
-        #         if (j != 3) and (j != 7) and (j != 11):
-        #             frame[j] = rotation[j - int(j / 4)]
-        #         else:
-        #             frame[j] = xyz[j % 3]
-
-        #     tcp.append(frame)
-
-        # if self.use_torch:
-        #     return torch.stack(tcp)
-        # else:
-        #     return np.asarray(tcp)
 
     def calc_xyz_euler(self, positions):
         start1 = time.time()
@@ -223,35 +169,24 @@ class DataHandler(object):
             return self.calc_xyz_euler(positions)
 
     def get_extreme_positions(self):
-        split = self.split
-        split -= 1
-        limits = self.robot.joint_limits
-        extremes_robot = []
-        for lim in limits:
-            abs_ = np.sum(np.absolute(lim))
-            steps = int(abs_ / split)
-            missing = abs_ % split
-            adding_point = int(split / 2)
-            extreme = lim[1]
-            extremes_joint = [extreme]
-            for it in range(split):
-                extreme += steps
-                if it == adding_point:
-                    extreme += missing
-                extremes_joint.append(extreme)
-            extremes_robot.append(np.array(extremes_joint))
-
-        return np.array(np.meshgrid(*np.array(extremes_robot))).T.reshape(-1, len(limits))
+        joint_grids = []
+        for joint_range in self.robot.joint_limits:
+            joint_grids.append(np.linspace(joint_range[1], joint_range[0], self.split))
+        
+        joint_combinations = np.array(list(product(*joint_grids)))
+        
+        return joint_combinations
     
     def generate_n_positions(self, n=100):
         degree_joint_pos = []
         extremes_computed = False
 
         if self.compute_extreme_positions and self.split ** len(self.robot.joint_limits) > n:
-            print("Too few samples to generate. Either turn off generation of extreme positions or "
-                  "generate more Data.\n", self.split ** len(self.robot.joint_limits), "extreme positions "
-                  "must be generated but you only generate", n, "samples.")
-            sys.exit(1)
+            warnings.warn(f"Too few samples to generate extreme positions." 
+                          f" Either turn off generation of extreme positions or generate more Data." 
+                          f" {self.split ** len(self.robot.joint_limits)} extreme positions must be generated" 
+                          f" but you only generate {n} samples.")
+            print("Extreme Positions not computed!")
         elif self.compute_extreme_positions:
             n -= self.split ** len(self.robot.joint_limits)
             extremes = self.get_extreme_positions()
@@ -260,7 +195,7 @@ class DataHandler(object):
         for joint_range in self.robot.joint_limits:
             degree_joint_pos.append(np.random.randint(joint_range[1], joint_range[0] + 1, n))
 
-        positions = np.around(np.transpose(degree_joint_pos), decimals=4)
+        positions = np.transpose(degree_joint_pos)
 
         if extremes_computed:
             positions = np.concatenate((positions, extremes))
@@ -285,14 +220,14 @@ class DataHandler(object):
 
         positions = self.generate_n_positions(datapoints)
         positions = np.around(np.radians(positions), decimals=4)
-        
+
         if self.noised:
             # Generate noise for each joint
-            noise = np.random.normal(0, sigma, len(self.robot.joint_limits) * datapoints).astype(int).reshape(datapoints, len(self.robot.joint_limits))
-            noised_pos = np.transpose(np.add(positions, noise))
+            noise = np.random.normal(0, np.radians(sigma), positions.shape)
+            noised_pos = positions + noise
             for i in range(len(self.robot.joint_limits)):
-                np.clip(noised_pos[i], self.robot.joint_limits[i][1], self.robot.joint_limits[i][0], noised_pos[i], casting='unsafe')
-            positions_end = np.transpose(noised_pos)
+                noised_pos[:, i] = np.clip(noised_pos[:, i], np.radians(self.robot.joint_limits[i][1]), np.radians(self.robot.joint_limits[i][0]))
+            positions_end = noised_pos
         elif self.relative:
             positions_end = self.generate_n_positions(datapoints)
             
@@ -375,36 +310,42 @@ class DataHandler(object):
         return denorm_data
     
     def set_maxima(self, tcp):
-        
-        if self.use_torch:
-            amax = torch.amax
-            amin = torch.amin
-        else:
-            amax = np.amax
-            amin = np.amin
-        
-        if not self.euler:
-            x_s = tcp[:, 3].flatten()
-            y_s = tcp[:, 7].flatten()
-            z_s = tcp[:, 11].flatten()
-        else:
-            x_s = tcp[:, 0].flatten()
-            y_s = tcp[:, 1].flatten()
-            z_s = tcp[:, 2].flatten()
+        if not self.init_maxima:
+            if tcp.shape[0] < 5000:
+                warnings.warn("Not enough data to find maxima. Please generate more data or turn off normalization.")
+                return False
+            if self.use_torch:
+                amax = torch.amax
+                amin = torch.amin
+            else:
+                amax = np.amax
+                amin = np.amin
+            
+            if not self.euler:
+                x_s = tcp[:, 3].flatten()
+                y_s = tcp[:, 7].flatten()
+                z_s = tcp[:, 11].flatten()
+            else:
+                x_s = tcp[:, 0].flatten()
+                y_s = tcp[:, 1].flatten()
+                z_s = tcp[:, 2].flatten()
 
-        xmax = amax(x_s)
-        xmin = amin(x_s)
-        ymax = amax(y_s)
-        ymin = amin(y_s)
-        zmax = amax(z_s)
-        zmin = amin(z_s)
+            xmax = amax(x_s)
+            xmin = amin(x_s)
+            ymax = amax(y_s)
+            ymin = amin(y_s)
+            zmax = amax(z_s)
+            zmin = amin(z_s)
 
-        if xmax > self.x_max: self.x_max = xmax
-        if xmin < self.x_min: self.x_min = xmin
-        if ymax > self.y_max: self.y_max = ymax
-        if ymin < self.y_min: self.y_min = ymin
-        if zmax > self.z_max: self.z_max = zmax
-        if zmin < self.z_min: self.z_min = zmin
+            if xmax > self.x_max: self.x_max = xmax
+            if xmin < self.x_min: self.x_min = xmin
+            if ymax > self.y_max: self.y_max = ymax
+            if ymin < self.y_min: self.y_min = ymin
+            if zmax > self.z_max: self.z_max = zmax
+            if zmin < self.z_min: self.z_min = zmin
+            
+            self.init_maxima = True
+        return True
     
     def norm_euler(self, tcp):
         '''
@@ -426,12 +367,18 @@ class DataHandler(object):
             xyz[:, 0] = (2 * (tmp[:, 0] - self.x_min) / (self.x_max - self.x_min)) - 1
             xyz[:, 1] = (2 * (tmp[:, 1] - self.y_min) / (self.y_max - self.y_min)) - 1
             xyz[:, 2] = (2 * (tmp[:, 2] - self.z_min) / (self.z_max - self.z_min)) - 1
+
+            # Normalize Euler angles to [-1, 1] based on range [-π, π]
+            euler = tmp[:, 3:6] / pi
         else:
             xyz[:, 0] = (tmp[:, 0] - self.x_min) / (self.x_max - self.x_min)
             xyz[:, 1] = (tmp[:, 1] - self.y_min) / (self.y_max - self.y_min)
             xyz[:, 2] = (tmp[:, 2] - self.z_min) / (self.z_max - self.z_min)
+
+            # Normalize Euler angles to [0, 1] from [-π, π]
+            euler = (tmp[:, 3:6] + pi) / (2 * pi)
         
-        euler = (2 * (tmp[:, 3:6] - (-pi)) / (pi - (-pi))) - 1
+        # euler = (2 * (tmp[:, 3:6] - (-pi)) / (pi - (-pi))) - 1
 
         return cat((xyz, euler), axis=1)
     
@@ -543,13 +490,13 @@ class DataHandler(object):
             if self.relative or self.noised:
                 jpos = self.norm_joint(jpos)
                 njpos = self.norm_joint(njpos)
-                self.set_maxima(tcp)
-                tcp = self.norm_tcp(tcp)
-                ntcp = self.norm_tcp(ntcp)
+                if self.set_maxima(tcp):
+                    tcp = self.norm_tcp(tcp)
+                    ntcp = self.norm_tcp(ntcp)
             else:
                 jpos = self.norm_joint(jpos)
-                self.set_maxima(tcp)
-                tcp = self.norm_tcp(tcp)
+                if self.set_maxima(tcp):
+                    tcp = self.norm_tcp(tcp)
             normalizing_time = time.time() - start
             
         # Print time if verbose
