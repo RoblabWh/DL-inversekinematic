@@ -105,61 +105,84 @@ class DataHandler(object):
 
     
     def calc_tcp(self, positions):
-        batch_size = positions.shape[0]
-        if self.use_torch:
-            positions = torch.tensor(positions, dtype=torch.float32, device=self.device)
-        frames = self.robot.buildDhTcpFrame(positions)
-        frames_flattened = frames.reshape(batch_size, -1)[:, :12]
 
-        xyz = frames_flattened[:, 3::4]
         if self.use_torch:
-            rotation = torch.round(torch.stack([frames_flattened[:, 0:3], frames_flattened[:, 4:7], frames_flattened[:, 8:11]], dim=1).reshape(batch_size, -1), decimals=9)
+            round = torch.round
+            cat = torch.cat
+            stack = torch.stack
+            if not isinstance(positions, torch.Tensor):
+                positions = torch.tensor(positions, dtype=torch.float32, device=self.device)
         else:
-            rotation = np.around(np.stack([frames_flattened[:, 0:3], frames_flattened[:, 4:7], frames_flattened[:, 8:11]], axis=1).reshape(batch_size, -1), decimals=9)
+            round = np.around
+            cat = np.concatenate
+            stack = np.stack
 
-        tcp = frames_flattened.clone() if self.use_torch else frames_flattened.copy()
+        batch_size = positions.shape[0]
+        frames = self.robot.buildDhTcpFrame(positions)
+        frames_flat = frames.reshape(batch_size, -1)[:, :12]
 
+        xyz = frames_flat[:, 3::4]
+
+        rot_cols = [
+            frames_flat[:, 0:3],
+            frames_flat[:, 4:7],
+            frames_flat[:, 8:11]
+        ]
+
+        rotation = round(stack(rot_cols, 1).reshape(batch_size, -1), decimals=9)
+
+        tcp_cols = []
         for j in range(12):
             if (j != 3) and (j != 7) and (j != 11):
-                tcp[:, j] = rotation[:, j - int(j / 4)]
+                #tcp[:, j] = rotation[:, j - int(j / 4)]
+                tcp_cols.append(rotation[:, j - int(j / 4)].unsqueeze(1) if self.use_torch else np.expand_dims(rotation[:, j - int(j / 4)], axis=1))
             else:
-                tcp[:, j] = xyz[:, j % 3]
+                #tcp[:, j] = xyz[:, j % 3]
+                tcp_cols.append(xyz[:, j % 3].unsqueeze(1) if self.use_torch else np.expand_dims(xyz[:, j % 3], axis=1))
 
-            return tcp
+        tcp = cat(tcp_cols, axis=1)
+
+        return tcp
 
     def calc_xyz_euler(self, positions):
+        if self.use_torch:
+            stack = torch.stack
+        else:
+            stack = np.stack
         start1 = time.time()
         tcp_time = 0
-        
-        batch_size = positions.shape[0]
-        tcp = np.zeros((batch_size, 6)) if not self.use_torch else torch.zeros((batch_size, 6), dtype=torch.float32, device=self.device)
+
+        #batch_size = positions.shape[0]
+        #tcp = np.zeros((batch_size, 6)) if not self.use_torch else torch.zeros((batch_size, 6), dtype=torch.float32, device=self.device)
         start = time.time()
-        
+
         # Build the DH frames in one batch
         if self.use_torch and not isinstance(positions, torch.Tensor):
             positions = torch.tensor(positions, dtype=torch.float32, device=self.device)
-        
+
         frames = self.robot.buildDhTcpFrame(positions)
         end = time.time()
         tcp_time += end - start
-        
+
         # Extract xyz and euler angles
         xyz = frames[:, :3, 3]
         rotations = frames[:, :3, :3]
-        
+
         roll, pitch, yaw = self.get_roll_pitch_yaw(rotations)
 
-        tcp[:, 0:3] = xyz
-        tcp[:, 3] = roll
-        tcp[:, 4] = pitch
-        tcp[:, 5] = yaw
-            
+        tcp = stack((xyz[:, 0], xyz[:, 1], xyz[:, 2], roll, pitch, yaw), 1)
+
+        # tcp[:, 0:3] = xyz
+        # tcp[:, 3] = roll
+        # tcp[:, 4] = pitch
+        # tcp[:, 5] = yaw
+
         end2 = time.time()
-        
+
         if self.verbose:
             print("DH Transformation: %.2f Sekunden" %tcp_time)
             print("Euler Winkel: %.2f Sekunden" %(end2 - start1 - tcp_time))
-            
+
         return tcp
 
     def get_tcp(self, positions):
@@ -264,51 +287,51 @@ class DataHandler(object):
         '''
         
         if self.use_torch:
-            tmp = data.clone()
-            normalized_data = torch.zeros(tmp.shape, device=data.device)
             deg2rad = torch.deg2rad
         else:
-            tmp = copy.deepcopy(data)
-            normalized_data = np.zeros(tmp.shape)
             deg2rad = np.deg2rad
 
         num_joints = self.robot.get_num_axis()
+        out = []
 
         for i in range(num_joints):
             joint_max, joint_min = self.robot.joint_limits[i]
             max_rad = deg2rad(joint_max if not self.use_torch else torch.tensor(joint_max, dtype=torch.float32, device=data.device))
             min_rad = deg2rad(joint_min if not self.use_torch else torch.tensor(joint_min, dtype=torch.float32, device=data.device))
             if self.normrange == "minus1to1":
-                normalized_data[:, i] = ((2 * (tmp[:, i] - min_rad) / (max_rad - min_rad)) - 1)
+                joint = ((2 * (data[:, i] - min_rad) / (max_rad - min_rad)) - 1)
             else:
-                normalized_data[:, i] = (tmp[:, i] - min_rad) / (max_rad - min_rad)
+                joint = (data[:, i] - min_rad) / (max_rad - min_rad)
 
-        return normalized_data
+            out.append(joint.unsqueeze(1) if self.use_torch else np.expand_dims(joint, axis=1))
+
+        return torch.cat(out, dim=1) if self.use_torch else np.concatenate(out, axis=1)
 
     def denorm_joint(self, data):
         '''
         Denormalizes joint angles
         '''
         if self.use_torch:
-            denorm_data = data.clone()
             deg2rad = torch.deg2rad
         else:
-            denorm_data = copy.deepcopy(data)
             deg2rad = np.deg2rad
             
         num_joints = self.robot.get_num_axis()
+        out = []
 
         for i in range(num_joints):
             joint_max, joint_min = self.robot.joint_limits[i]
             max_rad = deg2rad(joint_max if not self.use_torch else torch.tensor(joint_max, dtype=torch.float32, device=data.device))
             min_rad = deg2rad(joint_min if not self.use_torch else torch.tensor(joint_min, dtype=torch.float32, device=data.device))
             if self.normrange == "minus1to1":
-                denorm_data[:, i] = (((denorm_data[:, i] + 1) * (max_rad - min_rad)) / 2) + min_rad
+                joint = (((data[:, i] + 1) * (max_rad - min_rad)) / 2) + min_rad
             else:
-                denorm_data[:, i] = (denorm_data[:, i] * (max_rad - min_rad)) + min_rad
+                joint = (data[:, i] * (max_rad - min_rad)) + min_rad
 
-        return denorm_data
-    
+            out.append(joint.unsqueeze(1) if self.use_torch else np.expand_dims(joint, axis=1))
+
+        return torch.cat(out, dim=1) if self.use_torch else np.concatenate(out, axis=1)
+
     def set_maxima(self, tcp):
         if not self.init_maxima:
             if tcp.shape[0] < 5000:
@@ -354,31 +377,29 @@ class DataHandler(object):
         
         if self.use_torch:
             pi = torch.pi
-            tmp = tcp.clone()
-            xyz = torch.zeros(tmp[:, 0:3].shape, device=tcp.device)
             cat = torch.cat
+            stack = torch.stack
         else:
             pi = np.pi
-            tmp = copy.deepcopy(tcp)
-            xyz = np.zeros(tmp[:, 0:3].shape)
             cat = np.concatenate
+            stack = np.stack
             
         if self.normrange == "minus1to1":
-            xyz[:, 0] = (2 * (tmp[:, 0] - self.x_min) / (self.x_max - self.x_min)) - 1
-            xyz[:, 1] = (2 * (tmp[:, 1] - self.y_min) / (self.y_max - self.y_min)) - 1
-            xyz[:, 2] = (2 * (tmp[:, 2] - self.z_min) / (self.z_max - self.z_min)) - 1
+            x = (2 * (tcp[:, 0] - self.x_min) / (self.x_max - self.x_min)) - 1
+            y = (2 * (tcp[:, 1] - self.y_min) / (self.y_max - self.y_min)) - 1
+            z = (2 * (tcp[:, 2] - self.z_min) / (self.z_max - self.z_min)) - 1
 
             # Normalize Euler angles to [-1, 1] based on range [-π, π]
-            euler = tmp[:, 3:6] / pi
+            euler = tcp[:, 3:6] / pi
         else:
-            xyz[:, 0] = (tmp[:, 0] - self.x_min) / (self.x_max - self.x_min)
-            xyz[:, 1] = (tmp[:, 1] - self.y_min) / (self.y_max - self.y_min)
-            xyz[:, 2] = (tmp[:, 2] - self.z_min) / (self.z_max - self.z_min)
+            x = (tcp[:, 0] - self.x_min) / (self.x_max - self.x_min)
+            y = (tcp[:, 1] - self.y_min) / (self.y_max - self.y_min)
+            z = (tcp[:, 2] - self.z_min) / (self.z_max - self.z_min)
 
             # Normalize Euler angles to [0, 1] from [-π, π]
-            euler = (tmp[:, 3:6] + pi) / (2 * pi)
-        
-        # euler = (2 * (tmp[:, 3:6] - (-pi)) / (pi - (-pi))) - 1
+            euler = (tcp[:, 3:6] + pi) / (2 * pi)
+
+        xyz = stack((x, y, z), 1)
 
         return cat((xyz, euler), axis=1)
     
@@ -387,20 +408,29 @@ class DataHandler(object):
         Normalizes tcp
         '''
         if self.use_torch:
-            xyz = tcp.clone()
+            cat = torch.cat
         else:
-            xyz = copy.deepcopy(tcp)
-            
-        if self.normrange == "minus1to1":
-            xyz[:, 3] = (2 * (xyz[:, 3] - self.x_min) / (self.x_max - self.x_min)) - 1
-            xyz[:, 7] = (2 * (xyz[:, 7] - self.y_min) / (self.y_max - self.y_min)) - 1
-            xyz[:, 11] = (2 * (xyz[:, 11] - self.z_min) / (self.z_max - self.z_min)) - 1
-        else:
-            xyz[:, 3] = (xyz[:, 3] - self.x_min) / (self.x_max - self.x_min)
-            xyz[:, 7] = (xyz[:, 7] - self.y_min) / (self.y_max - self.y_min)
-            xyz[:, 11] = (xyz[:, 11] - self.z_min) / (self.z_max - self.z_min)
+            cat = np.concatenate
 
-        return xyz
+        if self.normrange == "minus1to1":
+            x = (2 * (tcp[:, 3] - self.x_min) / (self.x_max - self.x_min)) - 1
+            y = (2 * (tcp[:, 7] - self.y_min) / (self.y_max - self.y_min)) - 1
+            z = (2 * (tcp[:, 11] - self.z_min) / (self.z_max - self.z_min)) - 1
+        else:
+            x = (tcp[:, 3] - self.x_min) / (self.x_max - self.x_min)
+            y = (tcp[:, 7] - self.y_min) / (self.y_max - self.y_min)
+            z = (tcp[:, 11] - self.z_min) / (self.z_max - self.z_min)
+
+        tcp_ = [
+            tcp[:, 0:3],
+            x.unsqueeze(1) if self.use_torch else np.expand_dims(x, 1),
+            tcp[:, 4:7],
+            y.unsqueeze(1) if self.use_torch else np.expand_dims(y, 1),
+            tcp[:, 8:11],
+            z.unsqueeze(1) if self.use_torch else np.expand_dims(z, 1)
+        ]
+
+        return cat(tcp_, 1)
 
     def norm_tcp(self, tcp):
         if not self.euler:
@@ -414,26 +444,27 @@ class DataHandler(object):
         '''
         if self.use_torch:
             pi = torch.pi
-            tmp = tcp.clone()
-            xyz = torch.zeros(tmp[:, 0:3].shape, device=tcp.device)
             cat = torch.cat
+            stack = torch.stack
         else:
             pi = np.pi
-            tmp = copy.deepcopy(tcp)
-            xyz = np.zeros(tmp[:, 0:3].shape)
             cat = np.concatenate
+            stack = np.stack
+
         if self.normrange == "minus1to1":
-            xyz[:, 0] = (tmp[:, 0] + 1) * (self.x_max - self.x_min) / 2 + self.x_min
-            xyz[:, 1] = (tmp[:, 1] + 1) * (self.y_max - self.y_min) / 2 + self.y_min
-            xyz[:, 2] = (tmp[:, 2] + 1) * (self.z_max - self.z_min) / 2 + self.z_min
+            x = (tcp[:, 0] + 1) * (self.x_max - self.x_min) / 2 + self.x_min
+            y = (tcp[:, 1] + 1) * (self.y_max - self.y_min) / 2 + self.y_min
+            z = (tcp[:, 2] + 1) * (self.z_max - self.z_min) / 2 + self.z_min
 
-            euler = (tmp[:, 3:6] + 1) * (pi - (-pi)) / 2 + (-pi)
+            euler = (tcp[:, 3:6] + 1) * (pi - (-pi)) / 2 + (-pi)
         else:
-            xyz[:, 0] = tmp[:, 0] * (self.x_max - self.x_min) + self.x_min
-            xyz[:, 1] = tmp[:, 1] * (self.y_max - self.y_min) + self.y_min
-            xyz[:, 2] = tmp[:, 2] * (self.z_max - self.z_min) + self.z_min
+            x = tcp[:, 0] * (self.x_max - self.x_min) + self.x_min
+            y = tcp[:, 1] * (self.y_max - self.y_min) + self.y_min
+            z = tcp[:, 2] * (self.z_max - self.z_min) + self.z_min
 
-            euler = tmp[:, 3:6] * (pi - (-pi)) + (-pi)
+            euler = tcp[:, 3:6] * (pi - (-pi)) + (-pi)
+
+        xyz = stack((x, y, z), 1)
 
         return cat((xyz, euler), axis=1)
     
@@ -442,20 +473,29 @@ class DataHandler(object):
         Denormalizes tcp
         '''
         if self.use_torch:
-            xyz = tcp.clone()
+            cat = torch.cat
         else:
-            xyz = copy.deepcopy(tcp)
+            cat = np.concatenate
 
         if self.normrange == "minus1to1":
-            xyz[:, 3] = (xyz[:, 3] + 1) * (self.x_max - self.x_min) / 2 + self.x_min
-            xyz[:, 7] = (xyz[:, 7] + 1) * (self.y_max - self.y_min) / 2 + self.y_min
-            xyz[:, 11] = (xyz[:, 11] + 1) * (self.z_max - self.z_min) / 2 + self.z_min
+            x = (tcp[:, 3] + 1) * (self.x_max - self.x_min) / 2 + self.x_min
+            y = (tcp[:, 7] + 1) * (self.y_max - self.y_min) / 2 + self.y_min
+            z = (tcp[:, 11] + 1) * (self.z_max - self.z_min) / 2 + self.z_min
         else:
-            xyz[:, 3] = xyz[:, 3] * (self.x_max - self.x_min) + self.x_min
-            xyz[:, 7] = xyz[:, 7] * (self.y_max - self.y_min) + self.y_min
-            xyz[:, 11] = xyz[:, 11] * (self.z_max - self.z_min) + self.z_min
+            x = tcp[:, 3] * (self.x_max - self.x_min) + self.x_min
+            y = tcp[:, 7] * (self.y_max - self.y_min) + self.y_min
+            z = tcp[:, 11] * (self.z_max - self.z_min) + self.z_min
 
-        return xyz
+        tcp_ = [
+            tcp[:, 0:3],
+            x.unsqueeze(1) if self.use_torch else np.expand_dims(x, 1),
+            tcp[:, 4:7],
+            y.unsqueeze(1) if self.use_torch else np.expand_dims(y, 1),
+            tcp[:, 8:11],
+            z.unsqueeze(1) if self.use_torch else np.expand_dims(z, 1)
+        ]
+
+        return cat(tcp_, 1)
     
     def denorm_tcp(self, tcp):
         if self.euler:

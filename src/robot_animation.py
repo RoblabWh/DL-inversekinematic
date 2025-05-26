@@ -87,8 +87,9 @@ class RobotAnimation(object):
             self.ax.plot(self.goal[0], self.goal[2], self.goal[2], '-o', markersize=5, markerfacecolor="red")
         self.draw_robot(q_array)
 
-    def dh_animation(self):
-        position = np.array([0 for i in range(len(self.robot.joint_limits))])
+    def dh_animation(self, position=None):
+        if position is None:
+            position = np.array([0 for i in range(len(self.robot.joint_limits))])
         self.plot_basis = False
         self.draw_robot(position)
         self.DhAnimation = DhAnimation(self)

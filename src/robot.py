@@ -11,18 +11,19 @@ class Robot():
         if robot:
             if robot=="youbot":
                 self.name = "YouBot"
-                balon = b"AAAAAAAAAAAYLURU+yH5vwAAAAAAAAAAGC1EVPsh+T8YLURU+yH5PzMzMzMzM7M/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgZVDi2zny \
-                        z9MN4lBYOWgP9ejcD0K18M/SOF6FK5HwT8AAAAAAAAAAAAAAAAAAAAAGC1EVPsh+b8AAAAAAAAAAAAAAAAAAAAAGC1EVPsh+T8AAAAAAAAAAA=="
-                berong = base64.decodebytes(balon)
-                mokuba = np.frombuffer(berong, dtype=np.float64).reshape((4,5))
-
-                a1 = [169, -169]
-                a2 = [90, -65]
-                a3 = [146, -151]
-                a4 = [102.5, -102.5]
-                a5 = [167.5, -167.5]
-
-                joint_limits = [a1, a2, a3, a4, a5]
+                mokuba = np.array([
+                    [0, 0, 0, 0, 0],  #Theta
+                    [0.147, 0.0, 0.0, 0.0, 0.2175],  #d
+                    [0.033, 0.155, 0.135, 0.0, 0.0],  # a
+                    [np.pi/2, 0.0, 0.0, np.pi / 2, 0.0]  # alpha
+                ])
+                joint_limits = [
+                    [169, -169],
+                    [90, -65],
+                    [146, -151],
+                    [102.5, -102.5],
+                    [167.5, -167.5]
+                ]
             elif robot == "baxter":
                 self.name = "Baxter"
                 balon = b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABI4XoUrkfRPwAAAAAAAAAAsp3vp8ZL1z8A \
@@ -34,12 +35,54 @@ class Robot():
                 joint_limits = [[180.0, -180.0] for i in range(7)]
                 self.name = "Baxter"
             elif robot == "twoaxis":
+                self.name = "TwoAxis"
                 # Define a generic two axis manipulator
                 mokuba = np.array([[-np.pi/2, -np.pi/2], #Theta
                                    [0, 0], #d
                                    [0.055, 0.155], #a
                                    [-np.pi/2, 0]]) #alpha
                 joint_limits = [[169, -169], [110, -75]]
+            elif robot == "threeaxis":
+                self.name = "threeaxis"
+                mokuba = np.array([
+                    [0, 0.0, 0.05, -np.pi / 2],  # Joint 1
+                    [0, 0.0, 0.16, 0.0],  # Joint 2
+                    [0, 0.0, 0.12, 0.0]  # Joint 3
+                ]).transpose()
+                joint_limits = [
+                    [169, -169],
+                    [90, -90],
+                    [130, -130]
+                ]
+            elif robot == "fouraxis":
+                self.name = "fouraxis"
+                mokuba = np.array([
+                    [0, 0.0, 0.05, -np.pi / 2],  # Joint 1
+                    [0, 0.0, 0.16, 0.0],  # Joint 2
+                    [0, 0.0, 0.12, 0.0],  # Joint 3
+                    [0, 0.0, 0.08, np.pi / 2]   # Joint 4
+                ]).transpose()
+                joint_limits = [
+                    [169, -169],
+                    [90, -90],
+                    [130, -130],
+                    [180, -180]
+                ]
+            elif robot == "fiveaxis":
+                self.name = "fiveaxis"
+                mokuba = np.array([
+                    [0, 0, 0, 0, 0],  #Theta
+                    [0.147, 0.0, 0.0, 0.0, 0.2175],  #d
+                    [0.033, 0.155, 0.135, 0.0, 0.0],  # a
+                    [np.pi/2, 0.0, 0.0, np.pi / 2, 0.0]  # alpha
+                ])
+                joint_limits = [
+                    [169, -169],
+                    [90, -65],
+                    [146, -151],
+                    [102.5, -102.5],
+                    [167.5, -167.5]
+                ]
             else:
                 print("\'youbot\' and \'baxter\' are supported.")
                 return
