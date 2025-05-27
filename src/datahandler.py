@@ -225,7 +225,7 @@ class DataHandler(object):
 
         return positions
 
-    def generate_data(self, datapoints, sigma=60):
+    def generate_data(self, datapoints, sigma=2):
         """This function generates data for the robot simulation. 
         It generates the joint angles and the TCPs.
 
@@ -503,7 +503,7 @@ class DataHandler(object):
         else:
             return self.denorm_xyz(tcp)
     
-    def __call__(self, batch_size, relative=None, noised=None, sigma=60, normalize=None, concat=True):
+    def __call__(self, batch_size, relative=None, noised=None, sigma=2, normalize=None, concat=True):
         begin = time.time()
         
         self.relative = relative if relative is not None else self.relative

@@ -140,7 +140,7 @@ def data_test():
     # Create data handler
     datahandler = DataHandler(robot=Robot(robot='youbot'))
     use_negativeToOne = True
-    datahandler.euler = True
+    datahandler.euler = False
     datahandler.relative = False
     datahandler.noised = True
     datahandler.normrange = "zeroToOne" if not use_negativeToOne else "minus1to1"
