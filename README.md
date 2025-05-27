@@ -11,3 +11,5 @@ Dabei zeigen wir wie ein solches Netz mit pytorch erzeugt wird und wie man es tr
 Als Deep Learning Framework wird [PyTorch](https://pytorch.org/get-started/locally/) genutzt. Folgen Sie zur Installation den Anweisungen im Link.
 
 Günstig ist die Verwendung einer virtuellen Umgebung (venv oder conda)
+ 
+Weiterhin hilfreich ist das Notebook: https://github.com/narcispr/dnn_inverse_kinematics/blob/main/ik_dnn_project.ipynb (https://github.com/narcispr/dnn_inverse_kinematics) für die iterative Berechnung der Rückwärtstransformation (jacobi) 
