@@ -9,6 +9,7 @@ import warnings
 from torch.utils.data import DataLoader, TensorDataset
 from itertools import product
 from src.robot import Robot
+from src.normrange import NormRange
 
 class DataHandler(object):
 
@@ -19,10 +20,7 @@ class DataHandler(object):
         self.split = 4
         self.robot = robot
 
-        self.dmax = np.around(np.radians(np.max(self.robot.joint_limits)), decimals=4)
-        self.dmin = np.around(np.radians(np.min(self.robot.joint_limits)), decimals=4)
-        
-        self.normrange = "minus1to1"
+        self.normrange = NormRange.MINUS_ONE_TO_ONE
         self.y_max = -float('inf')
         self.y_min = float('inf')
         self.x_max = -float('inf')
@@ -93,8 +91,8 @@ class DataHandler(object):
                         atan2(rotation[:, 2, 1], rotation[:, 2, 2]))
         
         pitch = where(singular,
-                            atan2(-rotation[:, 2, 0], sy),
-                            atan2(-rotation[:, 2, 0], sy))
+                            atan2(-rotation[:, 2, 0], rotation[:, 0, 0]),  # singular: use R[0,0] for stability
+                            atan2(-rotation[:, 2, 0], sy))                 # non-singular: use sy
         
         yaw = where(singular,
                         zeros_like(roll),
@@ -129,7 +127,8 @@ class DataHandler(object):
             frames_flat[:, 8:11]
         ]
 
-        rotation = round(stack(rot_cols, 1).reshape(batch_size, -1), decimals=9)
+        # Note: Do not use round() here - it breaks gradient flow in PyTorch
+        rotation = stack(rot_cols, 1).reshape(batch_size, -1)
 
         tcp_cols = []
         for j in range(12):
@@ -298,7 +297,7 @@ class DataHandler(object):
             joint_max, joint_min = self.robot.joint_limits[i]
             max_rad = deg2rad(joint_max if not self.use_torch else torch.tensor(joint_max, dtype=torch.float32, device=data.device))
             min_rad = deg2rad(joint_min if not self.use_torch else torch.tensor(joint_min, dtype=torch.float32, device=data.device))
-            if self.normrange == "minus1to1":
+            if self.normrange == NormRange.MINUS_ONE_TO_ONE:
                 joint = ((2 * (data[:, i] - min_rad) / (max_rad - min_rad)) - 1)
             else:
                 joint = (data[:, i] - min_rad) / (max_rad - min_rad)
@@ -323,7 +322,7 @@ class DataHandler(object):
             joint_max, joint_min = self.robot.joint_limits[i]
             max_rad = deg2rad(joint_max if not self.use_torch else torch.tensor(joint_max, dtype=torch.float32, device=data.device))
             min_rad = deg2rad(joint_min if not self.use_torch else torch.tensor(joint_min, dtype=torch.float32, device=data.device))
-            if self.normrange == "minus1to1":
+            if self.normrange == NormRange.MINUS_ONE_TO_ONE:
                 joint = (((data[:, i] + 1) * (max_rad - min_rad)) / 2) + min_rad
             else:
                 joint = (data[:, i] * (max_rad - min_rad)) + min_rad
@@ -384,7 +383,7 @@ class DataHandler(object):
             cat = np.concatenate
             stack = np.stack
             
-        if self.normrange == "minus1to1":
+        if self.normrange == NormRange.MINUS_ONE_TO_ONE:
             x = (2 * (tcp[:, 0] - self.x_min) / (self.x_max - self.x_min)) - 1
             y = (2 * (tcp[:, 1] - self.y_min) / (self.y_max - self.y_min)) - 1
             z = (2 * (tcp[:, 2] - self.z_min) / (self.z_max - self.z_min)) - 1
@@ -402,7 +401,7 @@ class DataHandler(object):
         xyz = stack((x, y, z), 1)
 
         return cat((xyz, euler), axis=1)
-    
+
     def norm_xyz(self, tcp):
         '''
         Normalizes tcp
@@ -412,7 +411,7 @@ class DataHandler(object):
         else:
             cat = np.concatenate
 
-        if self.normrange == "minus1to1":
+        if self.normrange == NormRange.MINUS_ONE_TO_ONE:
             x = (2 * (tcp[:, 3] - self.x_min) / (self.x_max - self.x_min)) - 1
             y = (2 * (tcp[:, 7] - self.y_min) / (self.y_max - self.y_min)) - 1
             z = (2 * (tcp[:, 11] - self.z_min) / (self.z_max - self.z_min)) - 1
@@ -451,7 +450,7 @@ class DataHandler(object):
             cat = np.concatenate
             stack = np.stack
 
-        if self.normrange == "minus1to1":
+        if self.normrange == NormRange.MINUS_ONE_TO_ONE:
             x = (tcp[:, 0] + 1) * (self.x_max - self.x_min) / 2 + self.x_min
             y = (tcp[:, 1] + 1) * (self.y_max - self.y_min) / 2 + self.y_min
             z = (tcp[:, 2] + 1) * (self.z_max - self.z_min) / 2 + self.z_min
@@ -467,7 +466,7 @@ class DataHandler(object):
         xyz = stack((x, y, z), 1)
 
         return cat((xyz, euler), axis=1)
-    
+
     def denorm_xyz(self, tcp):
         '''
         Denormalizes tcp
@@ -477,7 +476,7 @@ class DataHandler(object):
         else:
             cat = np.concatenate
 
-        if self.normrange == "minus1to1":
+        if self.normrange == NormRange.MINUS_ONE_TO_ONE:
             x = (tcp[:, 3] + 1) * (self.x_max - self.x_min) / 2 + self.x_min
             y = (tcp[:, 7] + 1) * (self.y_max - self.y_min) / 2 + self.y_min
             z = (tcp[:, 11] + 1) * (self.z_max - self.z_min) / 2 + self.z_min
@@ -496,13 +495,48 @@ class DataHandler(object):
         ]
 
         return cat(tcp_, 1)
-    
+
     def denorm_tcp(self, tcp):
         if self.euler:
             return self.denorm_euler(tcp)
         else:
             return self.denorm_xyz(tcp)
-    
+
+    def get_normalization_bounds(self) -> dict:
+        """Return normalization bounds for saving with model checkpoint."""
+        return {
+            'x_min': float(self.x_min),
+            'x_max': float(self.x_max),
+            'y_min': float(self.y_min),
+            'y_max': float(self.y_max),
+            'z_min': float(self.z_min),
+            'z_max': float(self.z_max),
+            'euler': self.euler,
+            'normrange': self.normrange.value,
+        }
+
+    def set_normalization_bounds(self, bounds: dict):
+        """Restore normalization bounds from checkpoint."""
+        self.x_min = bounds['x_min']
+        self.x_max = bounds['x_max']
+        self.y_min = bounds['y_min']
+        self.y_max = bounds['y_max']
+        self.z_min = bounds['z_min']
+        self.z_max = bounds['z_max']
+        self.euler = bounds['euler']
+        self.normrange = NormRange.from_string(bounds['normrange'])
+        self.init_maxima = True  # Mark as initialized so set_maxima() won't overwrite
+
+    def sync_normalization_to_model(self, model):
+        """Copy current normalization bounds to model buffers.
+
+        This syncs the DataHandler's normalization bounds to an IKModelBase model,
+        allowing the model checkpoint to be self-contained.
+        """
+        from src.models import IKModelBase
+        if self.init_maxima and isinstance(model, IKModelBase):
+            model.set_normalization_bounds(self.get_normalization_bounds())
+
     def __call__(self, batch_size, relative=None, noised=None, sigma=2, normalize=None, concat=True):
         begin = time.time()
         

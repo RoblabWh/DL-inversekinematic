@@ -9,7 +9,7 @@ class Robot():
         #[dh_theta_values, dh_d_values, dh_a_values, dh_alpha_values]
         self.name = "Robot"
         if robot:
-            if robot=="youbot":
+            if robot=="youbot" or robot=="YouBot":
                 self.name = "YouBot"
                 mokuba = np.array([
                     [0, 0, 0, 0, 0],  #Theta
@@ -24,7 +24,7 @@ class Robot():
                     [102.5, -102.5],
                     [167.5, -167.5]
                 ]
-            elif robot == "baxter":
+            elif robot == "baxter" or robot == "Baxter":
                 self.name = "Baxter"
                 balon = b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABI4XoUrkfRPwAAAAAAAAAAsp3vp8ZL1z8A \
                 AAAAAAAAAFYOLbKd79c/AAAAAAAAAADsUbgehevRP0SLbOf7qbE/AAAAAAAAAABEi2zn+6mxPwAAAAAAAAAAexSuR+F6hD8AAAAAAAAAAAAAAAAAAAAAGC \
@@ -34,7 +34,7 @@ class Robot():
 
                 joint_limits = [[180.0, -180.0] for i in range(7)]
                 self.name = "Baxter"
-            elif robot == "twoaxis":
+            elif robot == "twoaxis" or robot == "TwoAxis":
                 self.name = "TwoAxis"
                 # Define a generic two axis manipulator
                 mokuba = np.array([[-np.pi/2, -np.pi/2], #Theta
@@ -42,8 +42,8 @@ class Robot():
                                    [0.055, 0.155], #a
                                    [-np.pi/2, 0]]) #alpha
                 joint_limits = [[169, -169], [110, -75]]
-            elif robot == "threeaxis":
-                self.name = "threeaxis"
+            elif robot == "threeaxis" or robot == "ThreeAxis":
+                self.name = "ThreeAxis"
                 mokuba = np.array([
                     [0, 0.0, 0.05, -np.pi / 2],  # Joint 1
                     [0, 0.0, 0.16, 0.0],  # Joint 2
@@ -54,8 +54,8 @@ class Robot():
                     [90, -90],
                     [130, -130]
                 ]
-            elif robot == "fouraxis":
-                self.name = "fouraxis"
+            elif robot == "fouraxis" or robot=="FourAxis":
+                self.name = "FourAxis"
                 mokuba = np.array([
                     [0, 0.0, 0.05, -np.pi / 2],  # Joint 1
                     [0, 0.0, 0.16, 0.0],  # Joint 2
@@ -68,8 +68,8 @@ class Robot():
                     [130, -130],
                     [180, -180]
                 ]
-            elif robot == "fiveaxis":
-                self.name = "fiveaxis"
+            elif robot == "fiveaxis" or robot=="FiveAxis":
+                self.name = "FiveAxis"
                 mokuba = np.array([
                     [0, 0, 0, 0, 0],  #Theta
                     [0.147, 0.0, 0.0, 0.0, 0.2175],  #d
@@ -84,7 +84,7 @@ class Robot():
                     [167.5, -167.5]
                 ]
             else:
-                print("\'youbot\' and \'baxter\' are supported.")
+                print("\'YouBot\',\'Baxter\'\'TwoAxis\',\'ThreeAxis\',\'FourAxis\' or \'FiveAxis\' are supported.")
                 return
             self.dh_values = mokuba
             self.joint_limits = joint_limits

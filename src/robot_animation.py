@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from ipywidgets import interact, interactive, fixed, interact_manual
 import ipywidgets as widgets
+from IPython.display import display
 from pytransform3d.rotations import *
 from mpl_toolkits.mplot3d import proj3d
 import copy
@@ -27,8 +28,8 @@ class RobotAnimation(object):
         self.robot_frame = None
 
         self.fig = plt.figure(f"{self.robot.name} Simulator")
-        self.ax = plt.axes([-0.05, -0.05, 1.20, 1.20], projection='3d', autoscale_on=False)
-        self.text= self.ax.text(0,0,self.axscale + self.axscale/10, s="", va="bottom", ha="left")
+        self.ax = self.fig.add_axes([-0.05, -0.05, 1.20, 1.20], projection='3d', autoscale_on=False)
+        self.text = self.ax.text(0,0,self.axscale + self.axscale/10, s="", va="bottom", ha="left")
 
         #self.fig.canvas.mpl_connect('button_press_event', self.onclick)
 
@@ -107,7 +108,6 @@ class RobotAnimation(object):
             if i == 2:
                 break
         self.set_ax()
-
         plt.show()
 
     def plot_positions(self, coordinates, rotation, _color="orange"):  # gets the x,y,z values
