@@ -1,6 +1,6 @@
 .ipynb_checkpoints
 *.h5
-*.pt
+/*.pt
 *.keras
 Auslagerung.ipynb
 __pycache__/
