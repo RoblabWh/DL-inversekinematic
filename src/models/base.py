@@ -34,6 +34,8 @@ class IKModelBase(nn.Module, ABC):
             self.register_buffer('z_max', torch.tensor(1.0))
             self.register_buffer('_euler', torch.tensor(False))
             self.register_buffer('_normrange_minus1to1', torch.tensor(True))
+            self.register_buffer('_relative', torch.tensor(False))
+            self.register_buffer('_noised', torch.tensor(False))
         else:
             self.register_buffer('_norm_initialized', torch.tensor(True))
             self.register_buffer('x_min', torch.tensor(float(config['x_min'])))
@@ -45,6 +47,8 @@ class IKModelBase(nn.Module, ABC):
             self.register_buffer('_euler', torch.tensor(config.get('euler', False)))
             self.register_buffer('_normrange_minus1to1',
                                torch.tensor(config.get('normrange', NormRange.MINUS_ONE_TO_ONE.value) == NormRange.MINUS_ONE_TO_ONE.value))
+            self.register_buffer('_relative', torch.tensor(config.get('relative', False)))
+            self.register_buffer('_noised', torch.tensor(config.get('noised', False)))
 
     def set_normalization_bounds(self, config: Dict[str, Any]):
         """Update bounds (called by Trainer after first batch)."""
@@ -56,6 +60,8 @@ class IKModelBase(nn.Module, ABC):
         self.z_max.fill_(float(config['z_max']))
         self._euler.fill_(config.get('euler', False))
         self._normrange_minus1to1.fill_(config.get('normrange', NormRange.MINUS_ONE_TO_ONE.value) == NormRange.MINUS_ONE_TO_ONE.value)
+        self._relative.fill_(config.get('relative', False))
+        self._noised.fill_(config.get('noised', False))
         self._norm_initialized.fill_(True)
 
     def get_normalization_bounds(self) -> Dict[str, Any]:
@@ -69,6 +75,8 @@ class IKModelBase(nn.Module, ABC):
             'z_max': float(self.z_max.item()),
             'euler': bool(self._euler.item()),
             'normrange': NormRange.MINUS_ONE_TO_ONE.value if self._normrange_minus1to1.item() else NormRange.ZERO_TO_ONE.value,
+            'relative': bool(self._relative.item()),
+            'noised': bool(self._noised.item()),
         }
 
     @property

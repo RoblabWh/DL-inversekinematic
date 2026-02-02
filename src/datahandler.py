@@ -513,6 +513,8 @@ class DataHandler(object):
             'z_max': float(self.z_max),
             'euler': self.euler,
             'normrange': self.normrange.value,
+            'relative': self.relative,
+            'noised': self.noised,
         }
 
     def set_normalization_bounds(self, bounds: dict):
@@ -526,6 +528,10 @@ class DataHandler(object):
         self.euler = bounds['euler']
         self.normrange = NormRange.from_string(bounds['normrange'])
         self.init_maxima = True  # Mark as initialized so set_maxima() won't overwrite
+        if 'relative' in bounds:
+            self.relative = bounds['relative']
+        if 'noised' in bounds:
+            self.noised = bounds['noised']
 
     def sync_normalization_to_model(self, model):
         """Copy current normalization bounds to model buffers.
