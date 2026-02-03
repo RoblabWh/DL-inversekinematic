@@ -44,7 +44,7 @@ def load_checkpoint(path: str, device=None):
     config = checkpoint["model_config"].copy()
     arch = config.pop("arch")
     model = create_model(arch, **config)
-    model.load_state_dict(checkpoint["state_dict"])
+    model.load_state_dict(checkpoint["state_dict"], strict=False)
     model.to(device)
     return model
 
@@ -69,7 +69,7 @@ def load_checkpoint_full(path: str, device=None) -> Dict[str, Any]:
     config = checkpoint["model_config"].copy()
     arch = config.pop("arch")
     model = create_model(arch, **config)
-    model.load_state_dict(checkpoint["state_dict"])
+    model.load_state_dict(checkpoint["state_dict"], strict=False)
     model.to(device)
 
     return {
