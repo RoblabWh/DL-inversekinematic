@@ -12,10 +12,10 @@ class Robot():
             if robot=="youbot" or robot=="YouBot":
                 self.name = "YouBot"
                 mokuba = np.array([
-                    [0, 0, 0, 0, 0],  #Theta
+                    [0, np.pi / 2, 0, np.pi / 2, 0],  #Theta
                     [0.147, 0.0, 0.0, 0.0, 0.2175],  #d
                     [0.033, 0.155, 0.135, 0.0, 0.0],  # a
-                    [np.pi/2, 0.0, 0.0, np.pi / 2, 0.0]  # alpha
+                    [np.pi / 2, 0.0, 0.0, np.pi / 2, 0.0]  # alpha
                 ])
                 joint_limits = [
                     [169, -169],
@@ -71,7 +71,7 @@ class Robot():
             elif robot == "fiveaxis" or robot=="FiveAxis":
                 self.name = "FiveAxis"
                 mokuba = np.array([
-                    [0, 0, 0, 0, 0],  #Theta
+                    [0, np.pi / 2, 0, np.pi / 2, 0],  #Theta
                     [0.147, 0.0, 0.0, 0.0, 0.2175],  #d
                     [0.033, 0.155, 0.135, 0.0, 0.0],  # a
                     [np.pi/2, 0.0, 0.0, np.pi / 2, 0.0]  # alpha
