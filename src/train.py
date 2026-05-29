@@ -88,12 +88,6 @@ def train(model: nn.Module, datahandler: DataHandler, args, robot) -> float:
         eval_interval=args.eval_interval,
         log_batch_loss=args.log_batch_loss,
         run_name=args.run_name,
-        compute_llc=args.compute_llc,
-        llc_interval=args.llc_interval,
-        llc_num_chains=args.llc_num_chains,
-        llc_num_draws=args.llc_num_draws,
-        llc_num_burnin_steps=args.llc_num_burnin_steps,
-        llc_num_steps_bw_draws=args.llc_num_steps_bw_draws,
     )
     trainer.tcp_loss = args.tcp_loss
 
@@ -408,14 +402,6 @@ def main():
     parser.add_argument("--log-batch-loss", action="store_true", help="Log per-batch loss to Trackio")
     parser.add_argument("--run-name", type=str, default=None, help="Override run name for checkpoints")
 
-    # LLC/Grokking detection
-    parser.add_argument("--compute-llc", action="store_true", help="Enable LLC grokking detection")
-    parser.add_argument("--llc-interval", type=int, default=10, help="Epochs between LLC computations")
-    parser.add_argument("--llc-num-chains", type=int, default=3, help="Number of MCMC chains for LLC")
-    parser.add_argument("--llc-num-draws", type=int, default=100, help="Samples per chain for LLC")
-    parser.add_argument("--llc-num-burnin-steps", type=int, default=200, help="Burn-in steps before sampling (should be >= num-draws)")
-    parser.add_argument("--llc-num-steps-bw-draws", type=int, default=5, help="Steps between draws")
-
     # Loss function
     parser.add_argument(
         "--loss",
@@ -462,8 +448,6 @@ def main():
     print(f"Weight decay: {args.weight_decay}, Grad clip: {args.grad_clip}")
     if args.trackio_project:
         print(f"Trackio: {args.trackio_project}" + (f" (space: {args.trackio_space_id})" if args.trackio_space_id else ""))
-    if args.compute_llc:
-        print(f"LLC detection: enabled (interval={args.llc_interval}, chains={args.llc_num_chains}, draws={args.llc_num_draws}, burnin={args.llc_num_burnin_steps})")
     print(f"Input shape: {datahandler.get_input_shape()}")
     print(f"Output shape: {datahandler.get_output_shape()}")
 

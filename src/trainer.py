@@ -9,9 +9,7 @@ class Trainer():
                  scheduler_type="plateau", scheduler_kwargs=None, grad_clip=None,
                  trackio_project="ik-dl", trackio_space_id=None,
                  compute_runtime_metrics=False, eval_interval=5, log_batch_loss=False,
-                 run_name=None,
-                 compute_llc=False, llc_interval=10, llc_num_chains=3, llc_num_draws=100,
-                 llc_num_burnin_steps=200, llc_num_steps_bw_draws=5):
+                 run_name=None):
         self.model = model
         self.optimizer = optimizer
         self.criterion = criterion
@@ -29,13 +27,6 @@ class Trainer():
         self.log_batch_loss = log_batch_loss
         # Checkpoint saving
         self.run_name = run_name
-        # LLC (grokking detection)
-        self.compute_llc = compute_llc
-        self.llc_interval = llc_interval
-        self.llc_num_chains = llc_num_chains
-        self.llc_num_draws = llc_num_draws
-        self.llc_num_burnin_steps = llc_num_burnin_steps
-        self.llc_num_steps_bw_draws = llc_num_steps_bw_draws
 
     def _create_scheduler(self, epochs, steps_per_epoch):
         """Create learning rate scheduler based on type."""
@@ -117,12 +108,6 @@ class Trainer():
             effective_run_name = None
 
         best_val_loss = float('inf')
-
-        # Initialize LLC tracking
-        llc_tracker = None
-        if self.compute_llc:
-            from src.grokking import LLCTracker
-            llc_tracker = LLCTracker()
 
         for epoch in range(epochs):
             train_loader, val_loader = datahandler.get_data_loaders(samples, batch_size, validation_split)
@@ -244,38 +229,6 @@ class Trainer():
 
                 if plot_training:
                     print(f"  → MAE: {joint_metrics['mae_total_deg']:.2f}°, Success<5°: {joint_metrics['success_rate_5deg']:.1%}")
-
-            # Compute LLC at specified intervals
-            if self.compute_llc and (epoch + 1) % self.llc_interval == 0:
-                from src.grokking import estimate_llc
-
-                llc_results = estimate_llc(
-                    model=self.model,
-                    loader=train_loader,  # Use train_loader for grokking detection
-                    device=self.device,
-                    criterion=self.criterion,
-                    num_chains=self.llc_num_chains,
-                    num_draws=self.llc_num_draws,
-                    num_burnin_steps=self.llc_num_burnin_steps,
-                    num_steps_bw_draws=self.llc_num_steps_bw_draws,
-                )
-
-                llc_metrics = llc_tracker.update(
-                    llc_mean=llc_results["llc/mean"],
-                    llc_std=llc_results["llc/std"],
-                )
-
-                if self.trackio_project:
-                    llc_log = {
-                        "llc/mean": llc_metrics["llc_mean"],
-                        "llc/std": llc_metrics["llc_std"],
-                    }
-                    if "llc_change_rate" in llc_metrics:
-                        llc_log["llc/change_rate"] = llc_metrics["llc_change_rate"]
-                    trackio.log(llc_log)
-
-                if plot_training:
-                    print(f"  → LLC: {llc_metrics['llc_mean']:.4f} ± {llc_metrics['llc_std']:.4f}")
 
         # Finalize Trackio
         if self.trackio_project:
